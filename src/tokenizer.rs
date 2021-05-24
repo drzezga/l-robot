@@ -12,7 +12,7 @@ pub enum Token {
     Err(String)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Operation {
     Add, Sub, Mul, Div, Exp
 }
@@ -135,36 +135,37 @@ pub fn tokenize(line: &str) -> Vec<Token> {
 
 fn parse_token(to_tokenize: &str, is_num: bool) -> Token {
     if is_num {
-        if let Ok(num) = to_tokenize.parse::<f64>() {
-            Token::Number(num)
-        } else {
-            Token::Err(String::from("Error parsing number"))
+        // turbofish pog
+        match to_tokenize.parse::<f64>() {
+            Ok(num) => Token::Number(num),
+            Err(err) => Token::Err(err.to_string())
         }
     } else {
-        Token::Name(String::from(to_tokenize))
+        Token::Name(to_tokenize.into())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_token, tokenize, Token, Operation};
+    use super::*;
     #[test]
-    fn parse_token_creates_names() {
-        assert_eq!(parse_token("guacamole", false), Token::Name(String::from("guacamole")));
+    fn parse_token_works() {
+        assert_eq!(parse_token("guacamole", false), Token::Name("guacamole".into()));
+
+        assert_eq!(parse_token("guacamole33", false), Token::Name("guacamole33".into()));
+
+        assert_eq!(parse_token("33", true), Token::Number(33.0));
+
+        assert!(matches!(parse_token("thisisdefinetelynotanumber", true), Token::Err(_)));
     }
 
     #[test]
-    fn parse_token_creates_names_with_num() {
-        assert_eq!(parse_token("guacamole33", false), Token::Name(String::from("guacamole33")));
-    }
-
-    #[test]
-    fn tokenize_creates_tokens() {
+    fn tokenize_creates_works() {
         assert_eq!(
             tokenize("(x+10)/3"),
             vec![
                 Token::OpeningParen,
-                Token::Name(String::from("x")),
+                Token::Name("x".into()),
                 Token::Operation(Operation::Add),
                 Token::Number(10.0),
                 Token::ClosingParen,
@@ -176,13 +177,13 @@ mod tests {
         assert_eq!(
             tokenize("v_t=10 [m/s^2]"),
             vec![
-                Token::Name(String::from("v_t")),
+                Token::Name("v_t".into()),
                 Token::Equals,
                 Token::Number(10.0),
                 Token::OpeningBracket,
-                Token::Name(String::from("m")),
+                Token::Name("m".into()),
                 Token::Operation(Operation::Div),
-                Token::Name(String::from("s")),
+                Token::Name("s".into()),
                 Token::Operation(Operation::Exp),
                 Token::Number(2.0),
                 Token::ClosingBracket,
