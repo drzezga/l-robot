@@ -249,7 +249,9 @@ pub mod parsers {
     }
     
     pub fn optimise_tree(_tree: &mut ASTNode) {
-        println!("optimising");
+        // println!("optimising");
+        // Collapse empty, where possible
+
     }
 }
 
@@ -259,6 +261,21 @@ pub mod walkers {
     use crate::{parser::ASTNodeType, tokenizer::Token};
 
     use super::ASTNode;
+
+    /// Walks over every element in the tree, calling modify. Stops on delimeters.
+    pub fn simple_walker<F>(tree: &mut ASTNode, modify: &F)
+        where F : Fn(&mut ASTNode) {
+        // iterate recursively over everything, stopping on delimeters
+        modify(tree);
+        match tree.node_type {
+            ASTNodeType::Delimeter(_) => (),
+            _ => {
+                for child in &mut tree.children {
+                    simple_walker(child, modify);
+                }
+            }
+        }
+    }
 
     /// Walks over a tree and folds expressions of form (* interfix *)
     pub fn interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)

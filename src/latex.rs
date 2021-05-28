@@ -22,7 +22,15 @@ impl ASTNode {
                 Token::ClosingBracket => "]".into(),
                 _ => "".into()
             }
-            ASTNodeType::Empty => if let Some(child) = self.children.first() { format!("{{{}}}", child.to_latex()) } else { String::new() },
+            ASTNodeType::Empty => {
+                if self.children.len() == 0 {
+                    "".into()
+                } else if self.children.len() == 1 {
+                    self.children.first().unwrap().to_latex()
+                } else {
+                    join(self.children.iter().map(|x| x.to_latex()), " ")
+                }
+            }
             ASTNodeType::Quotient => {
                 if self.children.len() != 2 {
                     "Parsing error - quotient has wrong number of children".into()
@@ -31,30 +39,43 @@ impl ASTNode {
                 }
             }
             ASTNodeType::Power => {
-                if self.children.len() != 2 {
-                    "Parsing error - power has wrong number of children".into()
-                } else {
-                    let a = self.children[0].to_latex();
-                    let b = if let ASTNodeType::Delimeter(_) = self.children[1].node_type {
-                        self.children[1].to_latex()
-                    } else {
-                        format!("{{{}}}", self.children[1].to_latex())
+                if self.children.len() == 2 {
+                    let a = match self.children[0].node_type {
+                        ASTNodeType::Delimeter(_)
+                        | ASTNodeType::Equality
+                        | ASTNodeType::Function(_)
+                        | ASTNodeType::Empty => self.children[0].to_latex(),
+                        _ => format!("({})", self.children[0].to_latex())
+                    };
+                    let b = match self.children[1].node_type {
+                        ASTNodeType::Delimeter(_)
+                        | ASTNodeType::Equality
+                        | ASTNodeType::Function(_)
+                        | ASTNodeType::Empty => self.children[1].to_latex(),
+                        _ => format!("{{{}}}", self.children[1].to_latex())
                     };
                     format!("{}^{}", a, b)
+                } else {
+                    "".into()
                 }
             }
             ASTNodeType::Product => {
-                // TODO: multiplying fractions creates unnecessary parens 
+                // TODO: multiplying fractions creates unnecessary parens
                 if self.children.len() == 2 {
-                    let a = if let ASTNodeType::Delimeter(_) = self.children[0].node_type {
-                        self.children[0].to_latex()
-                    } else {
-                        format!("({})", self.children[0].to_latex())
+                    let a = match self.children[0].node_type {
+                        ASTNodeType::Delimeter(_)
+                        | ASTNodeType::Equality
+                        | ASTNodeType::Function(_)
+                        | ASTNodeType::Empty => self.children[0].to_latex(),
+                        _ => format!("({})", self.children[0].to_latex())
                     };
-                    let b = if let ASTNodeType::Delimeter(_) = self.children[1].node_type {
-                        self.children[1].to_latex()
-                    } else {
-                        format!("({})", self.children[1].to_latex())
+                    let b = match self.children[1].node_type {
+                        ASTNodeType::Delimeter(_)
+                        | ASTNodeType::Equality
+                        | ASTNodeType::Function(_)
+                        | ASTNodeType::Quotient
+                        | ASTNodeType::Empty => self.children[1].to_latex(),
+                        _ => format!("({})", self.children[1].to_latex())
                     };
                     format!("{}*{}", a, b)
                 } else {
@@ -63,15 +84,19 @@ impl ASTNode {
             }
             ASTNodeType::Sum => {
                 if self.children.len() == 2 {
-                    let a = if let ASTNodeType::Delimeter(_) = self.children[0].node_type {
-                        self.children[0].to_latex()
-                    } else {
-                        format!("({})", self.children[0].to_latex())
+                    let a = match self.children[0].node_type {
+                        ASTNodeType::Delimeter(_)
+                        | ASTNodeType::Equality
+                        | ASTNodeType::Function(_)
+                        | ASTNodeType::Empty => self.children[0].to_latex(),
+                        _ => format!("({})", self.children[0].to_latex())
                     };
-                    let b = if let ASTNodeType::Delimeter(_) = self.children[1].node_type {
-                        self.children[1].to_latex()
-                    } else {
-                        format!("({})", self.children[1].to_latex())
+                    let b = match self.children[1].node_type {
+                        ASTNodeType::Delimeter(_)
+                        | ASTNodeType::Equality
+                        | ASTNodeType::Function(_)
+                        | ASTNodeType::Empty => self.children[1].to_latex(),
+                        _ => format!("({})", self.children[1].to_latex())
                     };
                     format!("{}+{}", a, b)
                 } else {
@@ -80,15 +105,19 @@ impl ASTNode {
             }
             ASTNodeType::Difference => {
                 if self.children.len() == 2 {
-                    let a = if let ASTNodeType::Delimeter(_) = self.children[0].node_type {
-                        self.children[0].to_latex()
-                    } else {
-                        format!("({})", self.children[0].to_latex())
+                    let a = match self.children[0].node_type {
+                        ASTNodeType::Delimeter(_)
+                        | ASTNodeType::Equality
+                        | ASTNodeType::Function(_)
+                        | ASTNodeType::Empty => self.children[0].to_latex(),
+                        _ => format!("({})", self.children[0].to_latex())
                     };
-                    let b = if let ASTNodeType::Delimeter(_) = self.children[1].node_type {
-                        self.children[1].to_latex()
-                    } else {
-                        format!("({})", self.children[1].to_latex())
+                    let b = match self.children[1].node_type {
+                        ASTNodeType::Delimeter(_)
+                        | ASTNodeType::Equality
+                        | ASTNodeType::Function(_)
+                        | ASTNodeType::Empty => self.children[1].to_latex(),
+                        _ => format!("({})", self.children[1].to_latex())
                     };
                     format!("{}-{}", a, b)
                 } else {
@@ -96,9 +125,6 @@ impl ASTNode {
                 }
             }
             _ => {
-                // this is where the fun begins
-                // let mut i = 0;
-
                 let separator: &str = match &self.node_type {
                     ASTNodeType::Sum => "+",
                     ASTNodeType::Difference => "-",
