@@ -1,4 +1,4 @@
-use crate::tokenizer::Token;
+use crate::tokenizer::{Token, TokenizingError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ASTNode {
@@ -47,15 +47,25 @@ pub enum ASTNodeType {
     Power,
     Equality,
     Delimeter(Token),
-    Error(String),
+    // Error(String),
     Function(String),
     Empty,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParseError {
+    // TokenizingError(TokenizingError),
+    UnmatchedOpeningParen,
+    UnmatchedClosingParen,
+    UnmatchedOpeningBracket,
+    UnmatchedClosingBracket,
+    WrongBracket
 }
 
 impl ASTNodeType {
     fn is_walkable(&self) -> bool {
         match self {
-            &Self::Error(_) | &Self::Delimeter(_) => false,
+            &Self::Delimeter(_) => false,
             _ => true
         }
     }
@@ -72,7 +82,7 @@ pub mod parsers {
     static ADD_TOKENS: &[Token] = &[Token::Operation(Operation::Add)];
     static SUB_TOKENS: &[Token] = &[Token::Operation(Operation::Sub)];
 
-    pub fn parse(tokens: &Vec<Token>) -> ASTNode {
+    pub fn parse(tokens: &Vec<Token>) -> Result<ASTNode, ParseError> {
         let mut out = wrap_tokens(tokens);
     
         // Order of operations:
@@ -85,7 +95,7 @@ pub mod parsers {
         //   7. Add
         //   8. Sub
     
-        let mut tree = parse_parens(&mut out);
+        let mut tree = parse_parens(&mut out)?;
 
         parse_brackets(&mut tree);
         
@@ -93,7 +103,7 @@ pub mod parsers {
 
         // TODO: Special case for fractions with direct numbers being parsed here (to make x^1/2 work)
 
-        // TODO: Inferred multiplying (10x, 10(3 + 4), n(n + 1))
+        // TODO: Inferred multiplication (10x, 10(3 + 4), n(n + 1))
 
         // Power
         walkers::interfix_walker(
@@ -157,7 +167,7 @@ pub mod parsers {
 
         optimise_tree(&mut tree);
 
-        tree
+        Ok(tree)
     }
 
     pub fn wrap_tokens(tokens: &Vec<Token>) -> Vec<ASTNode> {
@@ -167,7 +177,7 @@ pub mod parsers {
             .collect()
     }
     
-    pub fn parse_parens(tokens: &mut Vec<ASTNode>) -> ASTNode {
+    pub fn parse_parens(tokens: &mut Vec<ASTNode>) -> Result<ASTNode, ParseError> {
         // Parens
         // Store the subtree roots in a vec and add them to previous roots on closing parens
     
@@ -181,10 +191,7 @@ pub mod parsers {
                 }
                 ASTNodeType::Delimeter(Token::ClosingParen) => {
                     if roots.len() <= 1 {
-                        return ASTNode {
-                            node_type: ASTNodeType::Error("Unmatched closing paren".into()),
-                            ..Default::default()
-                        }
+                        return Err(ParseError::UnmatchedClosingParen);
                     } else {
                         // There are >= 2 elements in roots
                         let curr_root = roots.pop().unwrap();
@@ -204,16 +211,13 @@ pub mod parsers {
             }
         }
         if roots.len() != 1 {
-            return ASTNode {
-                node_type: ASTNodeType::Error("Unmatched opening paren".into()),
-                ..Default::default()
-            }
+            return Err(ParseError::UnmatchedOpeningParen);
         }
-        std::mem::take(&mut roots[0])
+        Ok(std::mem::take(&mut roots[0]))
         // roots[0]
     }
     
-    pub fn parse_brackets(tree: &mut ASTNode) {
+    pub fn parse_brackets(_tree: &mut ASTNode) {
         println!("parsing brackets");
     }
 
@@ -238,7 +242,6 @@ pub mod parsers {
                         }
                     }
                 }
-                ASTNodeType::Error(_) => (),
                 _ => {
                     // recursively walk subtrees that aren't delimeters and errors
                     parse_negatives(&mut tree.children[i]);
@@ -247,11 +250,61 @@ pub mod parsers {
             i += 1;
         }
     }
-    
-    pub fn optimise_tree(_tree: &mut ASTNode) {
+
+    pub fn optimise_tree(tree: &mut ASTNode) {
         // println!("optimising");
         // Collapse empty, where possible
+        collapse_empty(tree);
+    }
 
+    /// Collapses empty nodes with a single child and performs implied multiplication
+    pub fn collapse_empty(tree: &mut ASTNode) {
+        walkers::post_order(tree, &|node| {
+            if node.node_type == ASTNodeType::Empty {
+                let n = node.children.len();
+                if n == 1 {
+                    let mut el = node.children.pop().unwrap();
+                    std::mem::swap(node, &mut el);
+                } else if n > 1 {
+                    // TODO: check if implied multiplication occurs
+                    let mut i = 0;
+                    while i < node.children.len() {
+                        if is_implied_multiplication(&node.children[i], &node.children[i + 1]) {
+                            let removed = node.children
+                                .splice(i..=(i + 1), vec![ASTNode::new(ASTNodeType::Product, vec![])])
+                                .collect::<Vec<ASTNode>>();
+                            node.children[i].children = removed;
+                        }
+                        i += 1;
+                    }
+                }
+            }
+        });
+    }
+
+    /// Decides whether a and b can be multiplied implicitly
+    pub fn is_implied_multiplication(a: &ASTNode, b: &ASTNode) -> bool {
+        match a.node_type {
+            ASTNodeType::Delimeter(Token::Number(_)) // 10(x + 3)
+            | ASTNodeType::Delimeter(Token::Name(_)) // x(x^2 + 2)
+            | ASTNodeType::Quotient => {
+                // 1/2(1/x + 3) // 1/2 x^2 <- should this be allowed? // wolfram says yes, but assumes multiplication
+                // according to wolframalpha "10 20" = 200
+                // x (12) could be x * 12 or f: x(12)
+                false
+            }
+            ASTNodeType::Power => { // x^2(10)
+                false
+            }
+            // ASTNodeType::Empty => {} // parens
+            // ASTNodeType::Sum => {} // ex. 10 3 + 4
+            // ASTNodeType::Difference => {} // ex. 10 3 - 4
+            // ASTNodeType::Product => {} // ex. 10 3 * 4
+            // ASTNodeType::Quotient => {} // ex. 10 1/2
+            // ASTNodeType::Equality => { } // what
+            // ASTNodeType::Function(_) => {} // no
+            _ => false
+        }
     }
 }
 
@@ -262,8 +315,8 @@ pub mod walkers {
 
     use super::ASTNode;
 
-    /// Walks over every element in the tree, calling modify. Stops on delimeters.
-    pub fn simple_walker<F>(tree: &mut ASTNode, modify: &F)
+    /// Walks over every element in the tree, pre-order, calling modify. Stops on delimeters.
+    pub fn pre_order<F>(tree: &mut ASTNode, modify: &F)
         where F : Fn(&mut ASTNode) {
         // iterate recursively over everything, stopping on delimeters
         modify(tree);
@@ -271,16 +324,31 @@ pub mod walkers {
             ASTNodeType::Delimeter(_) => (),
             _ => {
                 for child in &mut tree.children {
-                    simple_walker(child, modify);
+                    pre_order(child, modify);
                 }
             }
         }
     }
 
+    /// Walks over every element in the tree, post-order, calling modify. Stops on delimeters.
+    pub fn post_order<F>(tree: &mut ASTNode, modify: &F)
+        where F : Fn(&mut ASTNode) {
+        // iterate recursively over everything, stopping on delimeters
+        match tree.node_type {
+            ASTNodeType::Delimeter(_) => (),
+            _ => {
+                for child in &mut tree.children {
+                    post_order(child, modify);
+                }
+            }
+        }
+        modify(tree);
+    }
+
     /// Walks over a tree and folds expressions of form (* interfix *)
     pub fn interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
         where F : Fn(ASTNode, ASTNode) -> ASTNode, T: Deref<Target = [Token]> {
-        // need to iterate over all children to recursively walk nested parens
+        // need to iterate over all children and recursively walk nested parens
         let mut i = 0;
         while i < tree.children.len() {
             match &tree.children[i].node_type {
@@ -288,7 +356,7 @@ pub mod walkers {
                     if i != 0 && i != tree.children.len() - 1 {
                         // the interfix isn't on the edges
                         match &tree.children[i + 1].node_type {
-                            ASTNodeType::Error(_) | ASTNodeType::Delimeter(_) => (),
+                            ASTNodeType::Delimeter(_) => (),
                             _ => {
                                 interfix_walker(&mut tree.children[i + 1], interfix_list, create);
                             }
@@ -305,7 +373,6 @@ pub mod walkers {
                         i -= 1;
                     }
                 }
-                ASTNodeType::Error(_) => (),
                 _ => {
                     // recursively walk subtrees that aren't delimeters and errors
                     interfix_walker(&mut tree.children[i], interfix_list, create);
@@ -316,16 +383,16 @@ pub mod walkers {
     }
 
     /// Walks over a tree and folds expressions of form (prefix *)
-    pub fn prefix_walker<F>(tree: &mut ASTNode, prefix: Token, create: F)
+    pub fn prefix_walker<F>(tree: &mut ASTNode, prefix: Token, _create: F)
         where F : Fn(&mut ASTNode) {
         for node in &mut tree.children {
             if let ASTNodeType::Delimeter(token) = &node.node_type {
                 if *token == prefix {
-
+                    
                 }
             }
         }
-        println!("das");
+        // println!("das");
     }
 }
 
@@ -345,7 +412,7 @@ mod tests {
             Token::ClosingParen,
             Token::OpeningParen,
             Token::ClosingParen,
-        ]));
+        ])).unwrap();
         assert_eq!(x, ASTNode {
             children: vec![
                 ASTNode {
@@ -378,7 +445,7 @@ mod tests {
             Token::ClosingParen,
             Token::Operation(Operation::Div),
             Token::Number(3.0)
-        ]));
+        ])).unwrap();
         assert_eq!(x, ASTNode {
             children: vec![
                 ASTNode {
@@ -402,8 +469,8 @@ mod tests {
             Token::OpeningParen,
             Token::ClosingParen,
             Token::OpeningParen,
-        ]));
-        assert_eq!(x.node_type, ASTNodeType::Error("Unmatched opening paren".into()));
+        ])).unwrap_err();
+        assert_eq!(x, ParseError::UnmatchedOpeningParen);
 
         let x = parsers::parse_parens(&mut parsers::wrap_tokens(&mut vec![
             Token::OpeningParen,
@@ -411,8 +478,9 @@ mod tests {
             Token::OpeningParen,
             Token::ClosingParen,
             Token::ClosingParen,
-        ]));
-        assert_eq!(x.node_type, ASTNodeType::Error("Unmatched closing paren".into()));
+        ])).unwrap_err();
+        assert_eq!(x, ParseError::UnmatchedClosingParen);
+        // assert_eq!(x.node_type, ASTNodeType::Error("Unmatched closing paren".into()));
     }
 
     #[test]
@@ -429,7 +497,7 @@ mod tests {
             Token::Operation(Operation::Exp),
             Token::Operation(Operation::Sub),
             Token::Number(10.0)
-        ]));
+        ])).unwrap();
 
         parsers::parse_negatives(&mut x);
 
@@ -538,16 +606,14 @@ mod tests {
             Token::Number(10.),
             Token::Operation(Operation::Exp),
             Token::Number(2.),
-        ]);
+        ]).unwrap();
         // println!("{:#?}", &x);
         assert_eq!(
-            x.children,
-            vec![
-                ASTNode::new(ASTNodeType::Power, vec![
-                    ASTNode::delimeter(Token::Number(10.)),
-                    ASTNode::delimeter(Token::Number(2.)),
-                ])
-            ]
+            x,
+            ASTNode::new(ASTNodeType::Power, vec![
+                ASTNode::delimeter(Token::Number(10.)),
+                ASTNode::delimeter(Token::Number(2.)),
+            ])
         )
     }
 }

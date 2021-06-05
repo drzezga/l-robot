@@ -22,18 +22,18 @@ fn main() {
             // generate latex
             // let str: String = "F_g=G*(m_1*m_2)/r^2".into();
             let str = sub_matches.value_of("INPUT").unwrap();
-            let tokens = tokenize(&str);
-            let tree = parse(&tokens);
+            let tokens = tokenize(&str).unwrap();
+            let tree = parse(&tokens).unwrap();
             let latex = tree.to_latex();
             println!("{}", latex);
         }
+        // no subcommands
         _ => {
             let str = matches.value_of("INPUT").unwrap();
-            let tokens = tokenize(&str);
-            let tree = parse(&tokens);
+            let tokens = tokenize(&str).unwrap();
+            let tree = parse(&tokens).unwrap();
             println!("{:#?}", tree);
             // let latex = tree.to_latex();
-            // no subcommands
         }
     }
 }

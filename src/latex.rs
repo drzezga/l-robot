@@ -6,7 +6,7 @@ use itertools::join;
 impl ASTNode {
     pub fn to_latex(&self) -> String {
         match &self.node_type {
-            ASTNodeType::Error(err) | ASTNodeType::Delimeter(Token::Err(err)) => format!("\\text{{{}}}", err),
+            // ASTNodeType::Error(err) | ASTNodeType::Delimeter(Token::Err(err)) => format!("\\text{{{}}}", err),
             ASTNodeType::Delimeter(token) => match token {
                 Token::Name(name) => name.into(),
                 Token::Number(num) => num.to_string(),
@@ -133,7 +133,7 @@ impl ASTNode {
                     ASTNodeType::Power => "^",
                     ASTNodeType::Equality => "=",
                     ASTNodeType::Function(name) => name.as_str(),
-                    ASTNodeType::Error(err) => err.as_str(),
+                    // ASTNodeType::Error(err) => err.as_str(),
                     _ => "",
                 };
 

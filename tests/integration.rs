@@ -3,17 +3,14 @@ mod tests {
 
     #[test]
     fn tokenize_parse() {
-        let x = tokenize("x^2");
-        let x = parse(&x);
-        // println!("{:#?}", &x);
+        let x = tokenize("x^2").unwrap();
+        let x = parse(&x).unwrap();
         assert_eq!(
-            x.children,
-            vec![
-                ASTNode::new(ASTNodeType::Power, vec![
-                    ASTNode::delimeter(Token::Name("x".into())),
-                    ASTNode::delimeter(Token::Number(2.0)),
-                ])
-            ]
+            x,
+            ASTNode::new(ASTNodeType::Power, vec![
+                ASTNode::delimeter(Token::Name("x".into())),
+                ASTNode::delimeter(Token::Number(2.0)),
+            ])
         )
     }
 }

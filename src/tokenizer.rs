@@ -8,8 +8,7 @@ pub enum Token {
     ClosingParen,
     OpeningBracket,
     ClosingBracket,
-    Empty,
-    Err(String)
+    Empty
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,8 +16,13 @@ pub enum Operation {
     Add, Sub, Mul, Div, Exp
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenizingError {
+    ParseFloatError(std::num::ParseFloatError)
+}
+
 // This can be done in parallel for each line
-pub fn tokenize(line: &str) -> Vec<Token> {
+pub fn tokenize(line: &str) -> Result<Vec<Token>, TokenizingError> {
     let mut out_vec = Vec::<Token>::new();
     let mut current = String::new();
     let mut is_num = true;
@@ -27,7 +31,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
         match char {
             '=' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::Equals);
@@ -35,7 +39,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             '+' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::Operation(Operation::Add));
@@ -43,7 +47,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             '-' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::Operation(Operation::Sub));
@@ -51,7 +55,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             '*' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::Operation(Operation::Mul));
@@ -59,7 +63,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             '/' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::Operation(Operation::Div));
@@ -67,7 +71,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             '^' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::Operation(Operation::Exp));
@@ -75,7 +79,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             '(' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::OpeningParen);
@@ -83,7 +87,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             ')' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::ClosingParen);
@@ -91,7 +95,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             '[' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::OpeningBracket);
@@ -99,7 +103,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             ']' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 out_vec.push(Token::ClosingBracket);
@@ -107,7 +111,7 @@ pub fn tokenize(line: &str) -> Vec<Token> {
             }
             ' ' => {
                 if !current.is_empty() {
-                    out_vec.push(parse_token(&current, is_num));
+                    out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
                 }
                 // out_vec.push(Token::Equals);
@@ -126,22 +130,22 @@ pub fn tokenize(line: &str) -> Vec<Token> {
         }
     }
     if !current.is_empty() {
-        out_vec.push(parse_token(&current, is_num));
+        out_vec.push(parse_token(&current, is_num)?);
         // current.clear();
     }
 
-    out_vec
+    Ok(out_vec)
 }
 
-fn parse_token(to_tokenize: &str, is_num: bool) -> Token {
+fn parse_token(to_tokenize: &str, is_num: bool) -> Result<Token, TokenizingError> {
     if is_num {
         // turbofish pog
         match to_tokenize.parse::<f64>() {
-            Ok(num) => Token::Number(num),
-            Err(err) => Token::Err(err.to_string())
+            Ok(num) => Ok(Token::Number(num)),
+            Err(err) => Err(TokenizingError::ParseFloatError(err))
         }
     } else {
-        Token::Name(to_tokenize.into())
+        Ok(Token::Name(to_tokenize.into()))
     }
 }
 
@@ -150,19 +154,19 @@ mod tests {
     use super::*;
     #[test]
     fn parse_token_works() {
-        assert_eq!(parse_token("guacamole", false), Token::Name("guacamole".into()));
+        assert_eq!(parse_token("guacamole", false).unwrap(), Token::Name("guacamole".into()));
 
-        assert_eq!(parse_token("guacamole33", false), Token::Name("guacamole33".into()));
+        assert_eq!(parse_token("guacamole33", false).unwrap(), Token::Name("guacamole33".into()));
 
-        assert_eq!(parse_token("33", true), Token::Number(33.0));
+        assert_eq!(parse_token("33", true).unwrap(), Token::Number(33.0));
 
-        assert!(matches!(parse_token("thisisdefinetelynotanumber", true), Token::Err(_)));
+        assert!(parse_token("thisisdefinetelynotanumber", true).is_err());
     }
 
     #[test]
     fn tokenize_creates_works() {
         assert_eq!(
-            tokenize("(x+10)/3"),
+            tokenize("(x+10)/3").unwrap(),
             vec![
                 Token::OpeningParen,
                 Token::Name("x".into()),
@@ -175,7 +179,7 @@ mod tests {
         );
 
         assert_eq!(
-            tokenize("v_t=10 [m/s^2]"),
+            tokenize("v_t=10 [m/s^2]").unwrap(),
             vec![
                 Token::Name("v_t".into()),
                 Token::Equals,
