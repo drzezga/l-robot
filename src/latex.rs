@@ -1,3 +1,4 @@
+use crate::parser::parsers::is_implied_multiplication;
 use crate::parser::{ASTNode, ASTNodeType};
 use crate::tokenizer::{Token, Operation};
 
@@ -77,7 +78,11 @@ impl ASTNode {
                         | ASTNodeType::Empty => self.children[1].to_latex(),
                         _ => format!("({})", self.children[1].to_latex())
                     };
-                    format!("{}*{}", a, b)
+                    if is_implied_multiplication(&self.children[0], &self.children[1]) {
+                        format!("{} {}", a, b)
+                    } else {
+                        format!("{}*{}", a, b)
+                    }
                 } else {
                     "".into()
                 }

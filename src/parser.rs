@@ -1,4 +1,4 @@
-use crate::tokenizer::{Token, TokenizingError};
+use crate::tokenizer::Token;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ASTNode {
@@ -218,7 +218,7 @@ pub mod parsers {
     }
     
     pub fn parse_brackets(_tree: &mut ASTNode) {
-        println!("parsing brackets");
+        // println!("parsing brackets");
     }
 
     pub fn parse_negatives(tree: &mut ASTNode) {
@@ -266,32 +266,68 @@ pub mod parsers {
                     let mut el = node.children.pop().unwrap();
                     std::mem::swap(node, &mut el);
                 } else if n > 1 {
-                    // TODO: check if implied multiplication occurs
-                    let mut i = 0;
-                    while i < node.children.len() {
+                    // skip the last element
+                    for i in 0..(node.children.len() - 1) {
                         if is_implied_multiplication(&node.children[i], &node.children[i + 1]) {
                             let removed = node.children
                                 .splice(i..=(i + 1), vec![ASTNode::new(ASTNodeType::Product, vec![])])
                                 .collect::<Vec<ASTNode>>();
                             node.children[i].children = removed;
                         }
-                        i += 1;
                     }
                 }
             }
         });
+        // after walking all children, check if the root can be collapsed
+        if tree.node_type == ASTNodeType::Empty && tree.children.len() == 1 {
+            let mut el = tree.children.pop().unwrap();
+            std::mem::swap(tree, &mut el);
+        }
     }
 
-    /// Decides whether a and b can be multiplied implicitly
+    /// Decides whether a and b can be multiplied implicitly.
+    /// Used when no operator is used or to make generated text less verbose.
+    /// ex. 10(x + 3) is the same as 10 * (x + 3)
     pub fn is_implied_multiplication(a: &ASTNode, b: &ASTNode) -> bool {
         match a.node_type {
+            // TODO: treat quotients the same as numbers only if quotient children are also numbers
             ASTNodeType::Delimeter(Token::Number(_)) // 10(x + 3)
-            | ASTNodeType::Delimeter(Token::Name(_)) // x(x^2 + 2)
             | ASTNodeType::Quotient => {
                 // 1/2(1/x + 3) // 1/2 x^2 <- should this be allowed? // wolfram says yes, but assumes multiplication
                 // according to wolframalpha "10 20" = 200
+                match b.node_type {
+                    ASTNodeType::Sum => true, // yes
+                    ASTNodeType::Difference => true, // yes
+                    ASTNodeType::Product => true, // yes
+                    // ASTNodeType::Quotient => false, // no
+                    ASTNodeType::Power => match b.children.first().unwrap().node_type { // only if the power base is not a delimeter or another power
+                        ASTNodeType::Delimeter(_) | ASTNodeType::Power => false,
+                        _ => true
+                    },
+                    // ASTNodeType::Equality => false, // no
+                    ASTNodeType::Delimeter(Token::Name(_)) => true,
+                    // ASTNodeType::Function(_) => false, // no
+                    ASTNodeType::Empty => true, // yes
+                    _ => false
+                }
+                // false
+            }
+            ASTNodeType::Delimeter(Token::Name(_)) => {
+                match b.node_type {
+                    ASTNodeType::Sum // yes
+                    | ASTNodeType::Difference // yes
+                    | ASTNodeType::Product // yes
+                    | ASTNodeType::Quotient // yes
+                    | ASTNodeType::Delimeter(Token::Name(_)) => true,
+                    // ASTNodeType::Power => todo!(), // no
+                    // ASTNodeType::Equality => todo!(), // no
+                    // ASTNodeType::Function(_) => todo!(), // no
+                    // ASTNodeType::Empty => todo!(), // yes
+                    _ => false
+                }
+                // x(x^2 + 2)
                 // x (12) could be x * 12 or f: x(12)
-                false
+                // false
             }
             ASTNodeType::Power => { // x^2(10)
                 false
@@ -388,7 +424,7 @@ pub mod walkers {
         for node in &mut tree.children {
             if let ASTNodeType::Delimeter(token) = &node.node_type {
                 if *token == prefix {
-                    
+                    todo!()
                 }
             }
         }
@@ -601,7 +637,7 @@ mod tests {
 
     // full parse tests
     #[test]
-    fn parse() {
+    fn parse_full() {
         let x = parsers::parse(&vec![
             Token::Number(10.),
             Token::Operation(Operation::Exp),
@@ -614,6 +650,90 @@ mod tests {
                 ASTNode::delimeter(Token::Number(10.)),
                 ASTNode::delimeter(Token::Number(2.)),
             ])
-        )
+        );
+
+        let x = parsers::parse(&vec![
+            Token::Number(10.),
+        ]).unwrap();
+        // println!("{:#?}", &x);
+        assert_eq!(
+            x,
+            ASTNode::delimeter(Token::Number(10.)),
+        );
+
+        let x = parsers::parse(&vec![
+            Token::Number(10.),
+            Token::Operation(Operation::Div),
+            Token::Number(0.),
+        ]).unwrap();
+        // println!("{:#?}", &x);
+        assert_eq!(
+            x,
+            ASTNode::new(ASTNodeType::Quotient, vec![
+                ASTNode::delimeter(Token::Number(10.)),
+                ASTNode::delimeter(Token::Number(0.)),
+            ])
+        );
+    }
+
+    #[test]
+    fn is_implied_multiplication() {
+        let x = parsers::parse(&vec![
+            Token::Number(10.),
+            Token::OpeningParen,
+            Token::Number(2.),
+            Token::Operation(Operation::Add),
+            Token::Number(4.),
+            Token::ClosingParen,
+        ]).unwrap();
+        // println!("{:#?}", &x);
+        assert_eq!(
+            x,
+            ASTNode::new(ASTNodeType::Product, vec![
+                ASTNode::delimeter(Token::Number(10.)),
+                ASTNode::new(ASTNodeType::Sum, vec![
+                    ASTNode::delimeter(Token::Number(2.)),
+                    ASTNode::delimeter(Token::Number(4.)),
+                ])
+            ])
+        );
+
+        let x = parsers::parse(&vec![
+            Token::Number(1.),
+            Token::Operation(Operation::Div),
+            Token::Number(2.),
+            Token::OpeningParen,
+            Token::Number(2.),
+            Token::Operation(Operation::Add),
+            Token::Number(4.),
+            Token::ClosingParen,
+        ]).unwrap();
+        // println!("{:#?}", &x);
+        assert_eq!(
+            x,
+            ASTNode::new(ASTNodeType::Product, vec![
+                ASTNode::new(ASTNodeType::Quotient, vec![
+                    ASTNode::delimeter(Token::Number(1.)),
+                    ASTNode::delimeter(Token::Number(2.)),
+                ]),
+                ASTNode::new(ASTNodeType::Sum, vec![
+                    ASTNode::delimeter(Token::Number(2.)),
+                    ASTNode::delimeter(Token::Number(4.)),
+                ])
+            ])
+        );
+
+        let x = parsers::parse(&vec![
+            Token::Number(10.),
+            Token::Name("x".into()),
+        ]).unwrap();
+        // println!("{:#?}", &x);
+        assert_eq!(
+            x,
+            ASTNode::new(ASTNodeType::Product, vec![
+                ASTNode::delimeter(Token::Number(10.)),
+                ASTNode::delimeter(Token::Name("x".into())),
+            ])
+        );
     }
 }

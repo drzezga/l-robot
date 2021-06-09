@@ -27,7 +27,7 @@ fn main() {
             let latex = tree.to_latex();
             println!("{}", latex);
         }
-        // no subcommands
+        // no subcommands or unknown
         _ => {
             let str = matches.value_of("INPUT").unwrap();
             let tokens = tokenize(&str).unwrap();
