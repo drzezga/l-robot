@@ -155,7 +155,7 @@ pub mod parsers {
             }
         );
 
-        // Subtraction
+        // Equality
         walkers::interfix_walker(
             &mut tree,
             &vec![Token::Equals],
@@ -180,10 +180,10 @@ pub mod parsers {
     pub fn parse_parens(tokens: &mut Vec<ASTNode>) -> Result<ASTNode, ParseError> {
         // Parens
         // Store the subtree roots in a vec and add them to previous roots on closing parens
-    
+
         // the first element is the absolute root, must never be popped as it is the result
         let mut roots = vec![ASTNode::default()];
-    
+
         for token in tokens {
             match token.node_type {
                 ASTNodeType::Delimeter(Token::OpeningParen) => {
@@ -352,6 +352,7 @@ pub mod walkers {
     use super::ASTNode;
 
     /// Walks over every element in the tree, pre-order, calling modify. Stops on delimeters.
+    /// Modifies elements from top to bottom.
     pub fn pre_order<F>(tree: &mut ASTNode, modify: &F)
         where F : Fn(&mut ASTNode) {
         // iterate recursively over everything, stopping on delimeters
@@ -367,6 +368,7 @@ pub mod walkers {
     }
 
     /// Walks over every element in the tree, post-order, calling modify. Stops on delimeters.
+    /// Modifies elements bottom up.
     pub fn post_order<F>(tree: &mut ASTNode, modify: &F)
         where F : Fn(&mut ASTNode) {
         // iterate recursively over everything, stopping on delimeters
