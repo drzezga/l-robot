@@ -14,6 +14,10 @@ impl ASTNode {
         }
     }
 
+    pub fn number(num: f64) -> Self {
+        Self::delimeter(Token::Number(num))
+    }
+
     pub fn empty(children: Vec<ASTNode>) -> Self {
         ASTNode {
             children,
@@ -259,7 +263,7 @@ pub mod parsers {
 
     /// Collapses empty nodes with a single child and performs implied multiplication
     pub fn collapse_empty(tree: &mut ASTNode) {
-        walkers::post_order(tree, &|node| {
+        walkers::post_order(tree, &mut |node| {
             if node.node_type == ASTNodeType::Empty {
                 let n = node.children.len();
                 if n == 1 {
@@ -369,8 +373,8 @@ pub mod walkers {
 
     /// Walks over every element in the tree, post-order, calling modify. Stops on delimeters.
     /// Modifies elements bottom up.
-    pub fn post_order<F>(tree: &mut ASTNode, modify: &F)
-        where F : Fn(&mut ASTNode) {
+    pub fn post_order<F>(tree: &mut ASTNode, modify: &mut F)
+        where F : FnMut(&mut ASTNode) {
         // iterate recursively over everything, stopping on delimeters
         match tree.node_type {
             ASTNodeType::Delimeter(_) => (),

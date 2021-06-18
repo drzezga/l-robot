@@ -1,5 +1,5 @@
 mod tests {
-    use literate_robot::{parser::{ASTNode, ASTNodeType, parsers::parse}, tokenizer::{Token, tokenize}};
+    use l_robot::{parser::{ASTNode, ASTNodeType, parsers::parse}, tokenizer::{Token, tokenize}};
 
     #[test]
     fn tokenize_parse() {
