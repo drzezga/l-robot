@@ -1,7 +1,7 @@
 use clap::{Arg, App};
 
 use colored::Colorize;
-use l_robot::{parser::parsers::parse, resolver::{ResolveMessageType, Resolver}, tokenizer::tokenize};
+use l_robot::{parser::parsers::parse, resolver::{ResolveMessage, ResolveMessageType, Resolver}, tokenizer::tokenize};
 
 fn main() {
     let matches = App::new("literate-robot")
@@ -16,9 +16,22 @@ fn main() {
             .about("Generates latex from the mathematical expression.")
             .arg(Arg::new("INPUT")
                 .index(1)))
+        .subcommand(App::new("debug")
+            .about("Debugs.")
+            .arg(Arg::new("INPUT")
+                .index(1)))
         .get_matches();
 
     match matches.subcommand() {
+        Some(("debug", sub_matches)) => {
+            // generate latex
+            // let str: String = "F_g=G*(m_1*m_2)/r^2".into();
+            let str = sub_matches.value_of("INPUT").unwrap();
+            let tokens = tokenize(&str).unwrap();
+            let tree = parse(&tokens).unwrap();
+            // let latex = tree.to_latex();
+            println!("{:#?}", tree);
+        }
         Some(("latex", sub_matches)) => {
             // generate latex
             // let str: String = "F_g=G*(m_1*m_2)/r^2".into();
@@ -37,7 +50,7 @@ fn main() {
             let mut resolver = Resolver::new();
             let output = resolver.resolve(vec![(1, tree)]);
 
-            for (line_num, (msg_type, message)) in output {
+            for (line_num, ResolveMessage { msg_type, content: message}) in output {
                 let message = match msg_type {
                     ResolveMessageType::Error => message.red(),
                     ResolveMessageType::Info => message.blue(),

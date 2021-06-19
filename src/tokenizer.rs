@@ -2,6 +2,7 @@
 pub enum Token {
     Name(String),
     Number(f64),
+    Boolean(bool),
     Operation(Operation),
     Equals,
     OpeningParen,

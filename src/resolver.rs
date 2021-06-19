@@ -7,11 +7,11 @@ use crate::parser::{ASTNode, ASTNodeType};
 use crate::parser::walkers::post_order;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Resolver<'a> {
-    namespace: HashMap<&'a str, f64>,
+pub struct Resolver {
+    pub namespace: HashMap<String, f64>,
 }
 
-impl<'a> Resolver<'a> {
+impl Resolver {
     pub fn new() -> Self {
         Self {
             namespace: HashMap::new(),
@@ -45,14 +45,14 @@ impl<'a> Resolver<'a> {
                 ASTNodeType::Quotient => {
                     let result = resolve_numbers(
                         x,
-                        |a, b| if b != 0. { Ok(a / b) } else { Err((ResolveMessageType::Error, "Divide by zero".into())) }
+                        |a, b| if b != 0. { Ok(a / b) } else { Err(ResolveMessage::error("Divide by zero")) }
                     );
                     if let Some(err) = result {
                         out.push(err);
                     }
                 },
                 ASTNodeType::Power => { resolve_numbers(x, |a, b| Ok(f64::powf(a, b))); },
-                ASTNodeType::Equality => todo!(),
+                ASTNodeType::Equality => (), // we're done
                 ASTNodeType::Function(f_name) => {
                     // currently if the name is in the namespace, it is multiplication
                     if let Some(_) = self.namespace.get(f_name.as_str()) {
@@ -82,14 +82,119 @@ impl<'a> Resolver<'a> {
             };
         });
 
-        if root.children.len() > 0 {
-            out.push((ResolveMessageType::Error, "Could not resolve".into()));
+        // TODO: An assumption is made here, that the unknown is a number
+        if encountered_unknowns == 1 {
+            if root.node_type == ASTNodeType::Equality {
+                match (&root.children[0].node_type, &root.children[1].node_type) {
+                    (_, ASTNodeType::Delimeter(Token::Number(_)))
+                    | (ASTNodeType::Delimeter(Token::Number(_)), _) => {
+                        let (mut unknown_side, mut other_side) = (root.children.pop().unwrap(), root.children.pop().unwrap());
+                        if matches!(unknown_side.node_type, ASTNodeType::Delimeter(Token::Number(_))) {
+                            std::mem::swap(&mut unknown_side, &mut other_side);
+                        }
+
+                        loop {
+                            if unknown_side.children.len() == 2 {
+                                // right and left are in revers, as items are popped from the right
+                                let (right, left) = (unknown_side.children.pop().unwrap(), unknown_side.children.pop().unwrap());
+                                let (unknown_on_left, unknown_side_val) = match (&left.node_type, &right.node_type) {
+                                    (ASTNodeType::Delimeter(Token::Number(a)), _) => (false, *a),
+                                    (_, ASTNodeType::Delimeter(Token::Number(a))) => (true, *a),
+                                    _ => {
+                                        out.push(ResolveMessage::error("Side other to unknown is not a number"));
+                                        break;
+                                    }
+                                };
+                                let other_side_val = match &mut other_side.node_type {
+                                    ASTNodeType::Delimeter(Token::Number(b)) => b,
+                                    _ => {
+                                        out.push(ResolveMessage::error("Side other to unknown is not a number"));
+                                        break;
+                                    }
+                                };
+                                match &unknown_side.node_type {
+                                    ASTNodeType::Sum => {
+                                        *other_side_val -= unknown_side_val;
+                                        unknown_side = if unknown_on_left { left } else { right };
+                                    },
+                                    ASTNodeType::Difference => {
+                                        *other_side_val += unknown_side_val;
+                                        unknown_side = if unknown_on_left { left } else { right };
+                                    },
+                                    ASTNodeType::Product => {
+                                        *other_side_val /= unknown_side_val;
+                                        unknown_side = if unknown_on_left { left } else { right };
+                                    },
+                                    ASTNodeType::Quotient => {
+                                        if unknown_on_left { // x / 2 = 10 -> x = 20
+                                            *other_side_val *= unknown_side_val;
+                                            unknown_side = left;
+                                        } else { // 2 / x = 10 -> x = 2 / 10
+                                            *other_side_val = unknown_side_val / *other_side_val;
+                                            unknown_side = right;
+                                        }
+                                    },
+                                    ASTNodeType::Power => {
+                                        out.push(ResolveMessage::error("Cannot evaluate powers of unknowns")); // TODO: resolve x^(2n+1))
+                                        break;
+                                    },
+                                    // ASTNodeType::Function(_) => todo!(), // all functions should have been evaluated
+                                    // ASTNodeType::Empty => (), // all empty objects should have been converted to parse errors
+                                    _ => {
+                                        break;
+                                    },
+                                }
+                            } else {
+                                match &unknown_side.node_type {
+                                    ASTNodeType::Delimeter(Token::Name(name)) => {
+                                        // we have arrived at the end
+                                        match &other_side.node_type {
+                                            ASTNodeType::Delimeter(Token::Number(num)) => {
+                                                // let clone = name.clone();
+                                                self.namespace.insert(name.to_string(), *num);
+                                                out.push(ResolveMessage::output(&format!("{} = {}", name, *num)));
+                                            }
+                                            _ => {
+                                                out.push(ResolveMessage::error("Could not resolve equation"));
+                                            }
+                                        }
+                                        break;
+                                    },
+                                    ASTNodeType::Equality => {
+                                        out.push(ResolveMessage::error("Multiple equality is disallowed"));
+                                        break;
+                                    },
+                                    _ => {
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    _ => {
+                        out.push(ResolveMessage::error("Could not resolve equation"));
+                    }
+                }
+            } else {
+                out.push(ResolveMessage::error("Could not resolve expression with unknown"));
+                out.push(ResolveMessage::info("To solve this, you can change the expression to an equation"));
+            }
+        } else if encountered_unknowns > 1 {
+            out.push(ResolveMessage::error("Could not resolve with more than one unknown"));
         } else {
-            match root.node_type {
-                ASTNodeType::Delimeter(Token::Number(num)) => {
-                    out.push((ResolveMessageType::Output, format!("? = {}", num).into()));
-                },
-                _ => ()
+            if root.children.len() > 0 {
+                if root.node_type == ASTNodeType::Equality {
+                    out.push(ResolveMessage::output(&format!("{}", root.children[0] == root.children[1])));
+                } else {
+                    out.push(ResolveMessage::error("Could not resolve"));
+                }
+            } else {
+                match root.node_type {
+                    ASTNodeType::Delimeter(Token::Number(num)) => {
+                        out.push(ResolveMessage::output(&format!("? = {}", num)));
+                    },
+                    _ => ()
+                }
             }
         }
 
@@ -102,7 +207,8 @@ impl<'a> Resolver<'a> {
 }
 
 // this seems like a bad idea
-// TODO: replace this ASAP, as we want to do a more generous match
+// TODO: replace this ASAP, as we want to be able to do a more generous match
+/// Performs an arithmetic operation on the children of `node`, replacing `node` with the result
 fn resolve_numbers(node: &mut ASTNode, operate: fn(f64, f64) -> Result<f64, ResolveMessage>) -> Option<ResolveMessage> {
     if node.children.len() == 2 {
         match (&node.children[0].node_type, &node.children[1].node_type) {
@@ -118,7 +224,7 @@ fn resolve_numbers(node: &mut ASTNode, operate: fn(f64, f64) -> Result<f64, Reso
         }
         None
     } else {
-        Some((ResolveMessageType::Error, "Too many children".into()))
+        Some(ResolveMessage::error("Too many children"))
     }
 }
 
@@ -129,9 +235,36 @@ pub enum ResolveMessageType {
     Output,
 }
 
-type ResolveMessage = (ResolveMessageType, String);
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolveMessage {
+    pub msg_type: ResolveMessageType,
+    pub content: String
+}
 
-/// For future use, now names can be only numbers
+impl ResolveMessage {
+    pub fn error(content: &str) -> Self {
+        Self {
+            content: content.into(),
+            msg_type: ResolveMessageType::Error
+        }
+    }
+
+    pub fn info(content: &str) -> Self {
+        Self {
+            content: content.into(),
+            msg_type: ResolveMessageType::Info
+        }
+    }
+
+    pub fn output(content: &str) -> Self {
+        Self {
+            content: content.into(),
+            msg_type: ResolveMessageType::Output
+        }
+    }
+}
+
+/// For future use, currently names can be only numbers
 pub enum NamespaceElement {
     Number(f64),
     BigNum(f64), // TODO: More types
@@ -141,7 +274,7 @@ pub enum NamespaceElement {
 
 #[cfg(test)]
 mod tests {
-    use crate::{parser::{ASTNode, ASTNodeType}, resolver::{self, ResolveMessageType, Resolver}};
+    use crate::{parser::{ASTNode, ASTNodeType}, resolver::{self, ResolveMessage, Resolver}, tokenizer::Token};
 
     #[test]
     fn resolve_numbers() {
@@ -158,9 +291,9 @@ mod tests {
     fn resolve_numbers_error() {
         let mut node = ASTNode::new(ASTNodeType::Sum, vec![ASTNode::number(10.), ASTNode::number(2.)]);
 
-        let output = resolver::resolve_numbers(&mut node, |_a, _b| Err((ResolveMessageType::Error, "this is a test".into())));
+        let output = resolver::resolve_numbers(&mut node, |_a, _b| Err(ResolveMessage::error("this is a test")));
 
-        assert_eq!(output, Some((ResolveMessageType::Error, "this is a test".into())));
+        assert_eq!(output, Some(ResolveMessage::error("this is a test")));
     }
 
     #[test]
@@ -175,6 +308,116 @@ mod tests {
 
         assert_eq!(output.len(), 1);
 
-        assert_eq!(output.first().unwrap().1, "? = 12");
+        assert_eq!(output.first().unwrap().content, "? = 12");
+    }
+
+    #[test]
+    fn resolve_unknowns_sum() {
+        let node = ASTNode::new(ASTNodeType::Equality, vec![
+            ASTNode::new(ASTNodeType::Sum, vec![ASTNode::delimeter(Token::Name("y".into())), ASTNode::number(2.)]),
+            ASTNode::number(100.)
+        ]);
+
+        let mut resolver = Resolver::new();
+
+        let output = resolver.resolve_line(node);
+
+        // println!("{:?}", output);
+
+        assert_eq!(output.len(), 1);
+
+        assert_eq!(output.first().unwrap().content, "y = 98");
+    }
+
+    #[test]
+    fn resolve_unknowns_diff() {
+        let node = ASTNode::new(ASTNodeType::Equality, vec![
+            ASTNode::new(ASTNodeType::Difference, vec![ASTNode::delimeter(Token::Name("y".into())), ASTNode::number(2.)]),
+            ASTNode::number(100.)
+        ]);
+
+        let mut resolver = Resolver::new();
+
+        let output = resolver.resolve_line(node);
+
+        // println!("{:?}", output);
+
+        assert_eq!(output.len(), 1);
+
+        assert_eq!(output.first().unwrap().content, "y = 102");
+    }
+
+    #[test]
+    fn resolve_unknowns_product() {
+        let node = ASTNode::new(ASTNodeType::Equality, vec![
+            ASTNode::new(ASTNodeType::Product, vec![ASTNode::delimeter(Token::Name("y".into())), ASTNode::number(2.)]),
+            ASTNode::number(100.)
+        ]);
+
+        let mut resolver = Resolver::new();
+
+        let output = resolver.resolve_line(node);
+
+        // println!("{:?}", output);
+
+        assert_eq!(output.len(), 1);
+
+        assert_eq!(output.first().unwrap().content, "y = 50");
+    }
+
+    #[test]
+    fn resolve_unknowns_quotient_left() {
+        let node = ASTNode::new(ASTNodeType::Equality, vec![
+            ASTNode::new(ASTNodeType::Quotient, vec![ASTNode::delimeter(Token::Name("y".into())), ASTNode::number(2.)]),
+            ASTNode::number(100.)
+        ]);
+
+        let mut resolver = Resolver::new();
+
+        let output = resolver.resolve_line(node);
+
+        // println!("{:?}", output);
+
+        assert_eq!(output.len(), 1);
+
+        assert_eq!(output.first().unwrap().content, "y = 200");
+    }
+
+    #[test]
+    fn resolve_unknowns_quotient_right() {
+        let node = ASTNode::new(ASTNodeType::Equality, vec![
+            ASTNode::new(ASTNodeType::Quotient, vec![ASTNode::number(2.), ASTNode::delimeter(Token::Name("y".into()))]),
+            ASTNode::number(100.)
+        ]);
+
+        let mut resolver = Resolver::new();
+
+        let output = resolver.resolve_line(node);
+
+        // println!("{:?}", output);
+
+        assert_eq!(output.len(), 1);
+
+        assert_eq!(output.first().unwrap().content, "y = 0.02");
+    }
+
+    #[test]
+    fn resolve_inserts_into_namespace() {
+        let node = ASTNode::new(ASTNodeType::Equality, vec![
+            ASTNode::delimeter(Token::Name("guacamole".into())),
+            ASTNode::number(100.)
+        ]);
+
+        let mut resolver = Resolver::new();
+
+        let output = resolver.resolve_line(node);
+
+        // println!("{:?}", output);
+
+        assert_eq!(output.len(), 1);
+
+        assert_eq!(output.first().unwrap().content, "guacamole = 100");
+
+        assert_eq!(resolver.namespace.get("guacamole".into()), Some(&100.));
     }
 }
