@@ -124,6 +124,9 @@ pub fn tokenize(line: &str) -> Result<Vec<Token>, TokenizingError> {
             '.' => {
                 current.push(char);
             }
+            '#' => {
+                break;
+            }
             _ => {
                 current.push(char);
                 is_num = false;

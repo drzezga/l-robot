@@ -84,7 +84,8 @@ fn main() {
 fn resolve_lines(lines: Vec<String>) -> Vec<(usize, ResolveMessage)> {
     let roots = lines
         .iter().enumerate()
-        .map(|(line_num, line)| (line_num + 1, tokenize(line).unwrap())) // TODO: better way of resolving errors
+        .map(|(line_num, line)| (line_num + 1, tokenize(line).unwrap()))
+        .filter(|(_, tokens)| tokens.len() != 0) // TODO: better way of resolving errors
         .map(|(line_num, tokens)| (line_num, parse(&tokens).unwrap()))
         .collect();
     // for root in &roots {
