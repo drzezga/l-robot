@@ -193,7 +193,9 @@ impl Resolver {
                     ASTNodeType::Delimeter(Token::Number(num)) => {
                         out.push(ResolveMessage::output(&format!("? = {}", num)));
                     },
-                    _ => ()
+                    _ => {
+                        out.push(ResolveMessage::error("Could not resolve"));
+                    }
                 }
             }
         }
