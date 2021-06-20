@@ -110,7 +110,7 @@ pub fn tokenize(line: &str) -> Result<Vec<Token>, TokenizingError> {
                 out_vec.push(Token::ClosingBracket);
                 is_num = true;
             }
-            ' ' => {
+            _ if char.is_whitespace() => {
                 if !current.is_empty() {
                     out_vec.push(parse_token(&current, is_num)?);
                     current.clear();
