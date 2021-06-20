@@ -53,13 +53,13 @@ fn main() {
                 }
             } else {
                 let str = matches.value_of("INPUT").unwrap();
-                resolve_lines(vec![str.to_string()])
+                resolve_lines(str.split(';').map(|x| x.to_string()).collect())
                 // let tokens = tokenize(&str).unwrap();
                 // let tree = parse(&tokens).unwrap();
                 // let mut resolver = Resolver::new();
                 // let output = resolver.resolve(vec![(1, tree)]);
-
             };
+
             for (line_num, ResolveMessage { msg_type, content: message}) in output {
                 let message = match msg_type {
                     ResolveMessageType::Error => message.red(),
