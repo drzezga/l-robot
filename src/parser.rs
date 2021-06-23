@@ -302,13 +302,16 @@ pub mod parsers {
                     std::mem::swap(node, &mut el);
                 } else if n > 1 {
                     // skip the last element
-                    for i in 0..(node.children.len() - 1) {
+                    // TODO: Remove this, number of elements decreases
+                    let mut i = 0;
+                    while i < node.children.len() - 1 {
                         if is_implied_multiplication(&node.children[i], &node.children[i + 1]) {
                             let removed = node.children
                                 .splice(i..=(i + 1), vec![ASTNode::new(ASTNodeType::Product, vec![])])
                                 .collect::<Vec<ASTNode>>();
                             node.children[i].children = removed;
                         }
+                        i += 1;
                     }
                 }
             }
@@ -554,17 +557,50 @@ pub mod walkers {
     // }
 
     /// Walks over a tree and folds expressions of form (prefix *)
-    pub fn prefix_walker<F>(tree: &mut ASTNode, prefix: Token, _create: F)
-        where F : Fn(&mut ASTNode) {
-        for node in &mut tree.children {
-            if let ASTNodeType::Delimeter(token) = &node.node_type {
-                if *token == prefix {
-                    todo!()
+    pub fn prefix_walker<F, T>(tree: &mut ASTNode, prefix_list: &T, create: &F)
+        where F : Fn(ASTNode) -> ASTNode, T: Deref<Target = [Token]> {
+        post_order(tree, &mut |node| {
+            // c-like for loop
+            if node.children.len() >= 2 {
+                let mut i = 0;
+                while i < node.children.len() - 1 {
+                    match &node.children[i].node_type {
+                        ASTNodeType::Delimeter(delimeter) if prefix_list.contains(delimeter) => {
+                            let new_token = create(
+                                // std::mem::take(&mut node.children[i - 1]),
+                                std::mem::take(&mut node.children[i + 1])
+                            );
+
+                            node.children.splice(i..=(i + 1), vec![new_token]);
+                        }
+                        _ => ()
+                    }
+                    i += 1;
                 }
             }
-        }
-        // println!("das");
+        });
     }
+
+    // pub fn generic_walker<F, T, const N: usize>(tree: &mut ASTNode, match_fn: &T, create: &F)
+    //     where T: Fn(&[ASTNode]) -> bool, F : Fn([ASTNode; N]) -> ASTNode {
+    //     post_order(tree, &mut |node| {
+    //         // c-like for loop
+    //         if node.children.len() >= N {
+    //             let mut i = 0;
+    //             while i < node.children.len() - N + 1 {
+    //                 if match_fn(&node.children[i..=(i + N)]) {
+    //                     let new_token = create(
+    //                         // std::mem::take(&mut node.children[i - 1]),
+    //                         std::mem::take(&mut node.children[i + 1])
+    //                     );
+
+    //                     node.children.splice(i..=(i + N), vec![new_token]);
+    //                 }
+    //                 i += 1;
+    //             }
+    //         }
+    //     });
+    // }
 }
 
 #[cfg(test)]

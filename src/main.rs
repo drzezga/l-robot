@@ -2,7 +2,7 @@ use clap::{Arg, App};
 use std::fs;
 
 use colored::Colorize;
-use l_robot::{parser::parsers::parse, resolver::{ResolveMessage, ResolveMessageType, Resolver}, tokenizer::tokenize};
+use l_robot::{parser::parsers::parse, resolve_lines, resolver::{ResolveMessage, ResolveMessageType}, tokenizer::tokenize};
 
 fn main() {
     let matches = App::new("literate-robot")
@@ -79,19 +79,4 @@ fn main() {
             }
         }
     }
-}
-
-fn resolve_lines(lines: Vec<String>) -> Vec<(usize, ResolveMessage)> {
-    let roots = lines
-        .iter().enumerate()
-        .map(|(line_num, line)| (line_num + 1, tokenize(line).unwrap()))
-        .filter(|(_, tokens)| tokens.len() != 0) // TODO: better way of resolving errors
-        .map(|(line_num, tokens)| (line_num, parse(&tokens).unwrap()))
-        .collect();
-    // for root in &roots {
-    //     println!("{:?}", root);
-    // }
-    // println!("{}", roots);
-    let mut resolver = Resolver::new();
-    resolver.resolve(roots)
 }
