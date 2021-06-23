@@ -117,7 +117,7 @@ pub mod parsers {
                 match (&a.node_type, &b.node_type) {
                     (ASTNodeType::Delimeter(Token::Number(_)), ASTNodeType::Delimeter(Token::Number(_))) => Some(ASTNode {
                         node_type: ASTNodeType::Quotient,
-                        children: vec![a, b]
+                        children: vec![std::mem::take(a), std::mem::take(b)]
                     }),
                     _ => None
                 }
@@ -402,79 +402,140 @@ pub mod walkers {
         modify(tree);
     }
 
-    // TODO: Reimplement this with existing tree traversal functions
+    // Interfix walker reimplemented with standard node traversal functions
     /// Walks over a tree and folds expressions of form (* interfix *)
     pub fn interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
         where F : Fn(ASTNode, ASTNode) -> ASTNode, T: Deref<Target = [Token]> {
-        // need to iterate over all children and recursively walk nested parens
-        let mut i = 0;
-        while i < tree.children.len() {
-            match &tree.children[i].node_type {
-                ASTNodeType::Delimeter(delimeter) if interfix_list.contains(delimeter) => {
-                    if i != 0 && i != tree.children.len() - 1 {
-                        // the interfix isn't on the edges
-                        match &tree.children[i + 1].node_type {
-                            ASTNodeType::Delimeter(_) => (),
-                            _ => {
-                                interfix_walker(&mut tree.children[i + 1], interfix_list, create);
-                            }
-                        }
+        post_order(tree, &mut |node| {
+            // c-like for loop
+            if node.children.len() >= 3 {
+                // println!("Interfix walker in {:#?}", node);
+                let mut i = 1;
+                while i < node.children.len() - 1 {
+                    match &node.children[i].node_type {
+                        ASTNodeType::Delimeter(delimeter) if interfix_list.contains(delimeter) => {
+                            let new_token = create(
+                                std::mem::take(&mut node.children[i - 1]),
+                                std::mem::take(&mut node.children[i + 1])
+                            );
 
-                        let new_token = create(
-                            std::mem::take(&mut tree.children[i - 1]),
-                            std::mem::take(&mut tree.children[i + 1])
-                        );
+                            // println!("Creating token, {:#?}", new_token);
 
-                        tree.children.splice((i - 1)..=(i + 1), vec![new_token]);
-                        // the inserted element is at position i - 1
-                        // decrease i, s.t. the next loop is at i
-                        i -= 1;
-                    }
-                }
-                _ => {
-                    // recursively walk subtrees that aren't delimeters and errors
-                    interfix_walker(&mut tree.children[i], interfix_list, create);
-                }
-            }
-            i += 1;
-        }
-    }
-
-    pub fn failing_interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
-        where F : Fn(ASTNode, ASTNode) -> Option<ASTNode>, T: Deref<Target = [Token]> {
-        // need to iterate over all children and recursively walk nested parens
-        let mut i = 0;
-        while i < tree.children.len() {
-            match &tree.children[i].node_type {
-                ASTNodeType::Delimeter(delimeter) if interfix_list.contains(delimeter) => {
-                    if i != 0 && i != tree.children.len() - 1 {
-                        // the interfix isn't on the edges
-                        match &tree.children[i + 1].node_type {
-                            ASTNodeType::Delimeter(_) => (),
-                            _ => {
-                                failing_interfix_walker(&mut tree.children[i + 1], interfix_list, create);
-                            }
-                        }
-
-                        if let Some(new_token) = create(
-                            std::mem::take(&mut tree.children[i - 1]),
-                            std::mem::take(&mut tree.children[i + 1])
-                        ) {
-                            tree.children.splice((i - 1)..=(i + 1), vec![new_token]);
+                            node.children.splice((i - 1)..=(i + 1), vec![new_token]);
                             // the inserted element is at position i - 1
                             // decrease i, s.t. the next loop is at i
                             i -= 1;
                         }
+                        _ => ()
                     }
-                }
-                _ => {
-                    // recursively walk subtrees that aren't delimeters and errors
-                    failing_interfix_walker(&mut tree.children[i], interfix_list, create);
+                    i += 1;
                 }
             }
-            i += 1;
-        }
+        });
     }
+
+    // Interfix walker reimplemented with standard node traversal functions
+    /// Walks over a tree and folds expressions of form (* interfix *)
+    pub fn failing_interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
+        where F : Fn(&mut ASTNode, &mut ASTNode) -> Option<ASTNode>, T: Deref<Target = [Token]> {
+        post_order(tree, &mut |node| {
+            // c-like for loop
+            let mut i = 1;
+            if node.children.len() >= 3 {
+                while i < node.children.len() - 1 {
+                    match &node.children[i].node_type {
+                        ASTNodeType::Delimeter(delimeter) if interfix_list.contains(delimeter) => {
+                            let (split_first, split_second) = node.children.split_at_mut(i);
+                            if let Some(new_token) = create(
+                                split_first.last_mut().unwrap(),
+                                &mut split_second[1]
+                            ) {
+                                node.children.splice((i - 1)..=(i + 1), vec![new_token]);
+                                // the inserted element is at position i - 1
+                                // decrease i, s.t. the next loop is at i
+                                i -= 1;
+                            }
+                        }
+                        _ => ()
+                    }
+                    i += 1;
+                }
+            }
+        });
+    }
+
+    /// Walks over a tree and folds expressions of form (* interfix *)
+    // pub fn interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
+    //     where F : Fn(ASTNode, ASTNode) -> ASTNode, T: Deref<Target = [Token]> {
+    //     // need to iterate over all children and recursively walk nested parens
+    //     let mut i = 0;
+    //     while i < tree.children.len() {
+    //         match &tree.children[i].node_type {
+    //             ASTNodeType::Delimeter(delimeter) if interfix_list.contains(delimeter) => {
+    //                 if i != 0 && i != tree.children.len() - 1 {
+    //                     // the interfix isn't on the edges
+    //                     match &tree.children[i + 1].node_type {
+    //                         ASTNodeType::Delimeter(_) => (),
+    //                         _ => {
+    //                             interfix_walker(&mut tree.children[i + 1], interfix_list, create);
+    //                         }
+    //                     }
+
+    //                     let new_token = create(
+    //                         std::mem::take(&mut tree.children[i - 1]),
+    //                         std::mem::take(&mut tree.children[i + 1])
+    //                     );
+
+    //                     tree.children.splice((i - 1)..=(i + 1), vec![new_token]);
+    //                     // the inserted element is at position i - 1
+    //                     // decrease i, s.t. the next loop is at i
+    //                     i -= 1;
+    //                 }
+    //             }
+    //             _ => {
+    //                 // recursively walk subtrees that aren't delimeters and errors
+    //                 interfix_walker(&mut tree.children[i], interfix_list, create);
+    //             }
+    //         }
+    //         i += 1;
+    //     }
+    // }
+
+    // pub fn failing_interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
+    //     where F : Fn(ASTNode, ASTNode) -> Option<ASTNode>, T: Deref<Target = [Token]> {
+    //     // need to iterate over all children and recursively walk nested parens
+    //     let mut i = 0;
+    //     while i < tree.children.len() {
+    //         match &tree.children[i].node_type {
+    //             ASTNodeType::Delimeter(delimeter) if interfix_list.contains(delimeter) => {
+    //                 if i != 0 && i != tree.children.len() - 1 {
+    //                     // the interfix isn't on the edges
+    //                     match &tree.children[i + 1].node_type {
+    //                         ASTNodeType::Delimeter(_) => (),
+    //                         _ => {
+    //                             failing_interfix_walker(&mut tree.children[i + 1], interfix_list, create);
+    //                         }
+    //                     }
+
+    //                     if let Some(new_token) = create(
+    //                         std::mem::take(&mut tree.children[i - 1]),
+    //                         std::mem::take(&mut tree.children[i + 1])
+    //                     ) {
+    //                         tree.children.splice((i - 1)..=(i + 1), vec![new_token]);
+    //                         // the inserted element is at position i - 1
+    //                         // decrease i, s.t. the next loop is at i
+    //                         i -= 1;
+    //                     }
+    //                 }
+    //             }
+    //             _ => {
+    //                 // recursively walk subtrees that aren't delimeters and errors
+    //                 failing_interfix_walker(&mut tree.children[i], interfix_list, create);
+    //             }
+    //         }
+    //         i += 1;
+    //     }
+    // }
 
     /// Walks over a tree and folds expressions of form (prefix *)
     pub fn prefix_walker<F>(tree: &mut ASTNode, prefix: Token, _create: F)

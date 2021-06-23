@@ -135,7 +135,7 @@ impl Resolver {
                                         }
                                     },
                                     ASTNodeType::Power => {
-                                        out.push(ResolveMessage::error("Cannot evaluate powers of unknowns")); // TODO: resolve x^(2n+1))
+                                        out.push(ResolveMessage::error("Cannot evaluate powers of unknowns")); // TODO: resolve x^(2n+1)
                                         break;
                                     },
                                     // ASTNodeType::Function(_) => todo!(), // all functions should have been evaluated

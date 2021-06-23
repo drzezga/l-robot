@@ -17,6 +17,8 @@ mod tests {
 
         let x = tokenize("F_g=G*(m_1*m_2)/r^2").unwrap();
         let x = parse(&x).unwrap();
+        
+        println!("{:#?}", x);
         assert_eq!(
             x,
             ASTNode::new(ASTNodeType::Equality, vec![
