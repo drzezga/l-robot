@@ -62,11 +62,13 @@ impl ASTNode {
             }
             ASTNodeType::Product => {
                 // TODO: multiplying fractions creates unnecessary parens
+                // currently seems to work, but there could be a caveat
                 if self.children.len() == 2 {
                     let a = match self.children[0].node_type {
                         ASTNodeType::Delimeter(_)
                         | ASTNodeType::Equality
                         | ASTNodeType::Function(_)
+                        | ASTNodeType::Quotient
                         | ASTNodeType::Empty => self.children[0].to_latex(),
                         _ => format!("({})", self.children[0].to_latex())
                     };

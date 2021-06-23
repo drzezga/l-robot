@@ -128,6 +128,10 @@ pub fn tokenize(line: &str) -> Result<Vec<Token>, TokenizingError> {
                 break;
             }
             _ => {
+                if is_num && !current.is_empty() {
+                    out_vec.push(parse_token(&current, is_num)?);
+                    current.clear();
+                }
                 current.push(char);
                 is_num = false;
             }
@@ -195,6 +199,17 @@ mod tests {
                 Token::Operation(Operation::Exp),
                 Token::Number(2.0),
                 Token::ClosingBracket,
+            ]
+        );
+    }
+
+    #[test]
+    fn split_number_before_name() {
+        assert_eq!(
+            tokenize("34dsa").unwrap(),
+            vec![
+                Token::Number(34.0),
+                Token::Name("dsa".into()),
             ]
         );
     }

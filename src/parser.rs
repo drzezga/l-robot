@@ -66,19 +66,19 @@ pub enum ParseError {
     WrongBracket
 }
 
-impl ASTNodeType {
-    fn is_walkable(&self) -> bool {
-        match self {
-            &Self::Delimeter(_) => false,
-            _ => true
-        }
-    }
-}
+// impl ASTNodeType {
+//     fn is_walkable(&self) -> bool {
+//         match self {
+//             &Self::Delimeter(_) => false,
+//             _ => true
+//         }
+//     }
+// }
 
 pub mod parsers {
     use crate::tokenizer::Operation;
 
-    use super::*;
+    use super::{*, walkers::post_order};
 
     static EXP_TOKENS: &[Token] = &[Token::Operation(Operation::Exp)];
     static DIV_TOKENS: &[Token] = &[Token::Operation(Operation::Div)];
@@ -104,10 +104,6 @@ pub mod parsers {
         parse_brackets(&mut tree);
         
         parse_negatives(&mut tree);
-
-        // TODO: Special case for fractions with direct numbers being parsed here (to make x^1/2 work)
-
-        // TODO: Inferred multiplication (10x, n(n + 1))
 
         // Division literals (10/3)
         walkers::failing_interfix_walker(
@@ -241,33 +237,53 @@ pub mod parsers {
     }
 
     pub fn parse_negatives(tree: &mut ASTNode) {
-        let mut i = 0;
-        while i < tree.children.len() {
-            match &tree.children[i].node_type {
-                ASTNodeType::Delimeter(delimeter) if *delimeter == Token::Operation(Operation::Sub) => {
-                    if i != tree.children.len() - 1 {
-                        if tree.children[i + 1].node_type.is_walkable() {
-                            parse_negatives(&mut tree.children[i + 1]);
-                        }
-
-                        if i == 0 || !tree.children[i - 1].node_type.is_walkable() {
-                            if let ASTNodeType::Delimeter(Token::Number(num)) = tree.children[i + 1].node_type {
-                                let new_node = ASTNode {
-                                    node_type: ASTNodeType::Delimeter(Token::Number(-num)),
-                                    ..Default::default()
-                                };
-                                tree.children.splice(i..=(i + 1), vec![new_node]);
+        post_order(tree, &mut |node| {
+            // c-like for loop
+            if node.children.len() >= 2 {
+                // println!("Interfix walker in {:#?}", node);
+                let mut i = 0;
+                while i < node.children.len() - 1 {
+                    match &node.children[i].node_type {
+                        ASTNodeType::Delimeter(delimeter) if *delimeter == Token::Operation(Operation::Sub) => {
+                            if i == 0 || matches!(node.children[i - 1].node_type, ASTNodeType::Delimeter(Token::Operation(_))) {
+                                if let ASTNodeType::Delimeter(Token::Number(num)) = node.children[i + 1].node_type {
+                                    node.children.splice(i..=(i + 1), vec![ASTNode::number(-num)]);
+                                }
                             }
                         }
+                        _ => ()
                     }
-                }
-                _ => {
-                    // recursively walk subtrees that aren't delimeters and errors
-                    parse_negatives(&mut tree.children[i]);
+                    i += 1;
                 }
             }
-            i += 1;
-        }
+        });
+        // let mut i = 0;
+        // while i < tree.children.len() {
+        //     match &tree.children[i].node_type {
+        //         ASTNodeType::Delimeter(delimeter) if *delimeter == Token::Operation(Operation::Sub) => {
+        //             if i != tree.children.len() - 1 {
+        //                 if tree.children[i + 1].node_type.is_walkable() {
+        //                     parse_negatives(&mut tree.children[i + 1]);
+        //                 }
+
+        //                 if i == 0 || !tree.children[i - 1].node_type.is_walkable() {
+        //                     if let ASTNodeType::Delimeter(Token::Number(num)) = tree.children[i + 1].node_type {
+        //                         let new_node = ASTNode {
+        //                             node_type: ASTNodeType::Delimeter(Token::Number(-num)),
+        //                             ..Default::default()
+        //                         };
+        //                         tree.children.splice(i..=(i + 1), vec![new_node]);
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //         _ => {
+        //             // recursively walk subtrees that aren't delimeters and errors
+        //             parse_negatives(&mut tree.children[i]);
+        //         }
+        //     }
+        //     i += 1;
+        // }
     }
 
     pub fn optimise_tree(tree: &mut ASTNode) {
@@ -591,7 +607,9 @@ mod tests {
             ],
             node_type: ASTNodeType::Empty,
         });
-
+    }
+    #[test]
+    fn parse_parens_and_other() {
         let x = parsers::parse_parens(&mut parsers::wrap_tokens(&mut vec![
             Token::OpeningParen,
             Token::Name("x".into()),
@@ -676,7 +694,7 @@ mod tests {
     }
 
     #[test]
-    fn interfix_walker() {
+    fn interfix_walker_div_sum() {
         // simple test
         let mut x = ASTNode {
             children: parsers::wrap_tokens(&mut vec![
@@ -756,7 +774,7 @@ mod tests {
 
     // full parse tests
     #[test]
-    fn parse_full() {
+    fn parse_full_square() {
         let x = parsers::parse(&vec![
             Token::Number(10.),
             Token::Operation(Operation::Exp),
@@ -770,7 +788,9 @@ mod tests {
                 ASTNode::delimeter(Token::Number(2.)),
             ])
         );
-
+    }
+    #[test]
+    fn parse_full_number() {
         let x = parsers::parse(&vec![
             Token::Number(10.),
         ]).unwrap();
@@ -779,7 +799,9 @@ mod tests {
             x,
             ASTNode::delimeter(Token::Number(10.)),
         );
-
+    }
+    #[test]
+    fn parse_full_div() {
         let x = parsers::parse(&vec![
             Token::Number(10.),
             Token::Operation(Operation::Div),
@@ -794,6 +816,35 @@ mod tests {
             ])
         );
     }
+    #[test]
+    fn parse_full_sub() {
+        let x = parsers::parse(&vec![
+            Token::Number(0.005),
+            Token::Operation(Operation::Sub),
+            Token::Number(0.002),
+        ]).unwrap();
+        // println!("{:#?}", &x);
+        assert_eq!(
+            x,
+            ASTNode::new(ASTNodeType::Difference, vec![
+                ASTNode::delimeter(Token::Number(0.005)),
+                ASTNode::delimeter(Token::Number(0.002)),
+            ])
+        );
+    }
+    #[test]
+    fn parse_full_negative() {
+        let x = parsers::parse(&vec![
+            // Token::Number(0.005),
+            Token::Operation(Operation::Sub),
+            Token::Number(0.002),
+        ]).unwrap();
+        // println!("{:#?}", &x);
+        assert_eq!(
+            x,
+            ASTNode::number(-0.002),
+        );
+    }
 
     #[test]
     fn is_implied_multiplication() {
@@ -805,7 +856,6 @@ mod tests {
             Token::Number(4.),
             Token::ClosingParen,
         ]).unwrap();
-        // println!("{:#?}", &x);
         assert_eq!(
             x,
             ASTNode::new(ASTNodeType::Product, vec![
@@ -816,7 +866,9 @@ mod tests {
                 ])
             ])
         );
-
+    }
+    #[test]
+    fn is_implied_multiplication_quotient() {
         let x = parsers::parse(&vec![
             Token::Number(1.),
             Token::Operation(Operation::Div),
@@ -827,7 +879,6 @@ mod tests {
             Token::Number(4.),
             Token::ClosingParen,
         ]).unwrap();
-        // println!("{:#?}", &x);
         assert_eq!(
             x,
             ASTNode::new(ASTNodeType::Product, vec![
@@ -841,12 +892,13 @@ mod tests {
                 ])
             ])
         );
-
+    }
+    #[test]
+    fn is_implied_multiplication_num_name() {
         let x = parsers::parse(&vec![
             Token::Number(10.),
             Token::Name("x".into()),
         ]).unwrap();
-        // println!("{:#?}", &x);
         assert_eq!(
             x,
             ASTNode::new(ASTNodeType::Product, vec![

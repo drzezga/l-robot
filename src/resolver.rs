@@ -95,7 +95,7 @@ impl Resolver {
 
                         loop {
                             if unknown_side.children.len() == 2 {
-                                // right and left are in revers, as items are popped from the right
+                                // right and left are in reverse, as items are popped from the right
                                 let (right, left) = (unknown_side.children.pop().unwrap(), unknown_side.children.pop().unwrap());
                                 let (unknown_on_left, unknown_side_val) = match (&left.node_type, &right.node_type) {
                                     (ASTNodeType::Delimeter(Token::Number(a)), _) => (false, *a),
