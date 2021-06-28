@@ -18,12 +18,12 @@ pub enum Operation {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum TokenizingError {
+pub enum TokenizeError {
     ParseFloatError(std::num::ParseFloatError)
 }
 
 // This can be done in parallel for each line
-pub fn tokenize(line: &str) -> Result<Vec<Token>, TokenizingError> {
+pub fn tokenize(line: &str) -> Result<Vec<Token>, TokenizeError> {
     let mut out_vec = Vec::<Token>::new();
     let mut current = String::new();
     let mut is_num = true;
@@ -145,12 +145,12 @@ pub fn tokenize(line: &str) -> Result<Vec<Token>, TokenizingError> {
     Ok(out_vec)
 }
 
-fn parse_token(to_tokenize: &str, is_num: bool) -> Result<Token, TokenizingError> {
+fn parse_token(to_tokenize: &str, is_num: bool) -> Result<Token, TokenizeError> {
     if is_num {
         // turbofish pog
         match to_tokenize.parse::<f64>() {
             Ok(num) => Ok(Token::Number(num)),
-            Err(err) => Err(TokenizingError::ParseFloatError(err))
+            Err(err) => Err(TokenizeError::ParseFloatError(err))
         }
     } else {
         Ok(Token::Name(to_tokenize.into()))

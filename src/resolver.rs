@@ -23,7 +23,7 @@ impl Resolver {
         // let namespace: Namespace = HashMap::new();
 
         // How many unknowns are in the expression, useful for determining whether we are able to solve it
-        // multiple occurances count as different unknowns for now, as we can't yet solve them
+        // multiple occurances count as different unknowns for now, as we can't solve them yet
 
         // node is the root node of a line
         for (line_num, node) in nodes {
