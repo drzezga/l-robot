@@ -391,19 +391,19 @@ pub mod walkers {
 
     /// Walks over every element in the tree, pre-order, calling modify. Stops on delimeters.
     /// Modifies elements from top to bottom.
-    pub fn pre_order<F>(tree: &mut ASTNode, modify: &F)
-        where F : Fn(&mut ASTNode) {
-        // iterate recursively over everything, stopping on delimeters
-        modify(tree);
-        match tree.node_type {
-            ASTNodeType::Delimeter(_) => (),
-            _ => {
-                for child in &mut tree.children {
-                    pre_order(child, modify);
-                }
-            }
-        }
-    }
+    // pub fn pre_order<F>(tree: &mut ASTNode, modify: &F)
+    //     where F : Fn(&mut ASTNode) {
+    //     // iterate recursively over everything, stopping on delimeters
+    //     modify(tree);
+    //     match tree.node_type {
+    //         ASTNodeType::Delimeter(_) => (),
+    //         _ => {
+    //             for child in &mut tree.children {
+    //                 pre_order(child, modify);
+    //             }
+    //         }
+    //     }
+    // }
 
     /// Walks over every element in the tree, post-order, calling modify. Stops on delimeters.
     /// Modifies elements bottom up.

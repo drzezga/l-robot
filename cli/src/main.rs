@@ -1,8 +1,9 @@
-use clap::{Arg, App};
 use std::fs;
 
-use colored::Colorize;
 use l_robot::{parser::parsers::parse, resolve_lines, resolver::{ResolveMessage, ResolveMessageType}, tokenizer::tokenize};
+
+use clap::{Arg, App};
+use colored::Colorize;
 
 fn main() {
     let matches = App::new("literate-robot")
