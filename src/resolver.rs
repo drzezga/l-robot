@@ -37,6 +37,18 @@ impl Resolver {
         let mut out = Vec::new();
         let mut encountered_unknowns: u32 = 0;
 
+        let mut has_empty = false;
+        post_order(&mut root, &mut |x| {
+            if x.node_type == ASTNodeType::Empty {
+                out.push(ResolveMessage::error("Wrong usage of operation"));
+            }
+            has_empty = true;
+        });
+
+        if has_empty {
+            return out;
+        }
+
         post_order(&mut root, &mut |x| {
             match &x.node_type {
                 ASTNodeType::Sum => { resolve_numbers(x, |a, b| Ok(a + b)); },

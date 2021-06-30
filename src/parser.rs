@@ -88,7 +88,7 @@ pub mod parsers {
 
     pub fn parse(tokens: &Vec<Token>) -> Result<ASTNode, ParseError> {
         let mut out = wrap_tokens(tokens);
-    
+
         // Order of operations:
         //   1. Parens and functions
         //   2. Brackets
@@ -98,12 +98,31 @@ pub mod parsers {
         //   6. Mul
         //   7. Add
         //   8. Sub
-    
+
         let mut tree = parse_parens(&mut out)?;
 
         parse_brackets(&mut tree);
-        
+
         parse_negatives(&mut tree);
+
+        walkers::generic_walker(
+            &mut tree,
+            &|table| matches!(
+                table,
+                [
+                    ASTNode { node_type: ASTNodeType::Delimeter(Token::Name(_)), .. },
+                    ASTNode { node_type: ASTNodeType::Empty, ..}
+                ]
+            ),
+            &|[name, empty]| {
+                if let ASTNodeType::Delimeter(Token::Name(name_string)) = name.node_type {
+                    ASTNode::new(ASTNodeType::Function(name_string), empty.children)
+                } else {
+                    // this is unreachable by the contract of generic_walker
+                    unreachable!()
+                }
+            }
+        );
 
         // Division literals (10/3)
         walkers::failing_interfix_walker(
@@ -191,7 +210,7 @@ pub mod parsers {
             .map(|x| ASTNode { node_type: ASTNodeType::Delimeter(x.clone()), ..Default::default() })
             .collect()
     }
-    
+
     pub fn parse_parens(tokens: &mut Vec<ASTNode>) -> Result<ASTNode, ParseError> {
         // Parens
         // Store the subtree roots in a vec and add them to previous roots on closing parens
@@ -225,9 +244,11 @@ pub mod parsers {
                 }
             }
         }
+
         if roots.len() != 1 {
             return Err(ParseError::UnmatchedOpeningParen);
         }
+
         Ok(std::mem::take(&mut roots[0]))
         // roots[0]
     }
@@ -384,10 +405,11 @@ pub mod parsers {
 
 pub mod walkers {
     use std::ops::Deref;
+    use std::convert::TryInto;
 
-    use crate::{parser::ASTNodeType, tokenizer::Token};
+    use crate::tokenizer::Token;
 
-    use super::ASTNode;
+    use super::{ASTNode, ASTNodeType};
 
     /// Walks over every element in the tree, pre-order, calling modify. Stops on delimeters.
     /// Modifies elements from top to bottom.
@@ -422,13 +444,13 @@ pub mod walkers {
     }
 
     // Interfix walker reimplemented with standard node traversal functions
+    // TODO: Interfix walker as a special case for a generic walker
     /// Walks over a tree and folds expressions of form (* interfix *)
     pub fn interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
         where F : Fn(ASTNode, ASTNode) -> ASTNode, T: Deref<Target = [Token]> {
         post_order(tree, &mut |node| {
             // c-like for loop
             if node.children.len() >= 3 {
-                // println!("Interfix walker in {:#?}", node);
                 let mut i = 1;
                 while i < node.children.len() - 1 {
                     match &node.children[i].node_type {
@@ -560,7 +582,7 @@ pub mod walkers {
     pub fn prefix_walker<F, T>(tree: &mut ASTNode, prefix_list: &T, create: &F)
         where F : Fn(ASTNode) -> ASTNode, T: Deref<Target = [Token]> {
         post_order(tree, &mut |node| {
-            // c-like for loop
+            // c-like for loop, because node.children.len() changes
             if node.children.len() >= 2 {
                 let mut i = 0;
                 while i < node.children.len() - 1 {
@@ -581,26 +603,27 @@ pub mod walkers {
         });
     }
 
-    // pub fn generic_walker<F, T, const N: usize>(tree: &mut ASTNode, match_fn: &T, create: &F)
-    //     where T: Fn(&[ASTNode]) -> bool, F : Fn([ASTNode; N]) -> ASTNode {
-    //     post_order(tree, &mut |node| {
-    //         // c-like for loop
-    //         if node.children.len() >= N {
-    //             let mut i = 0;
-    //             while i < node.children.len() - N + 1 {
-    //                 if match_fn(&node.children[i..=(i + N)]) {
-    //                     let new_token = create(
-    //                         // std::mem::take(&mut node.children[i - 1]),
-    //                         std::mem::take(&mut node.children[i + 1])
-    //                     );
+    /// Walks over a tree, post-order
+    pub fn generic_walker<F, T, const N: usize>(tree: &mut ASTNode, match_fn: &T, create: &F)
+        where T: Fn(&[ASTNode]) -> bool, F : Fn([ASTNode; N]) -> ASTNode {
+        post_order(tree, &mut |node| {
+            // c-like for loop
+            if node.children.len() >= N {
+                let mut i = 0;
+                // instead of while i <= node.children.len() - N to avoid negative numbers in usize
+                while i + N <= node.children.len() {
+                    if match_fn(&node.children[i..(i + N)]) {
+                        let spliced: Vec<_> = node.children.splice(i..(i + N), vec![ASTNode::empty(vec![])]).collect();
+                        let result: [ASTNode; N] = spliced.try_into().unwrap(); // the vec will always be exactly N elements
+                        let new_token = create(result);
 
-    //                     node.children.splice(i..=(i + N), vec![new_token]);
-    //                 }
-    //                 i += 1;
-    //             }
-    //         }
-    //     });
-    // }
+                        node.children[i] = new_token;
+                    }
+                    i += 1;
+                }
+            }
+        });
+    }
 }
 
 #[cfg(test)]
@@ -808,6 +831,47 @@ mod tests {
         )
     }
 
+    #[test]
+    fn generic_walker_interfix() {
+        let mut x = ASTNode {
+            children: vec![
+                ASTNode::delimeter(Token::Number(7.)),
+                ASTNode::delimeter(Token::Operation(Operation::Div)),
+                ASTNode::empty(vec![
+                    ASTNode::delimeter(Token::Number(13.)),
+                    ASTNode::delimeter(Token::Operation(Operation::Div)),
+                    ASTNode::delimeter(Token::Number(9.))
+                ])
+            ],
+            ..Default::default()
+        };
+
+        walkers::generic_walker(
+            &mut x,
+            &|table: &[ASTNode]| 
+                matches!(table[1].node_type, ASTNodeType::Delimeter(Token::Operation(Operation::Div))),
+            &|[a, _, c]| ASTNode {
+                node_type: ASTNodeType::Quotient,
+                children: vec![a, c]
+            }
+        );
+
+        assert_eq!(
+            x.children,
+            vec![
+                ASTNode::new(ASTNodeType::Quotient, vec![
+                    ASTNode::delimeter(Token::Number(7.)),
+                    ASTNode::empty(vec![
+                        ASTNode::new(ASTNodeType::Quotient, vec![
+                            ASTNode::delimeter(Token::Number(13.)),
+                            ASTNode::delimeter(Token::Number(9.))
+                        ])
+                    ])
+                ])
+            ]
+        )
+    }
+
     // full parse tests
     #[test]
     fn parse_full_square() {
@@ -883,6 +947,72 @@ mod tests {
     }
 
     #[test]
+    fn parse_full_fn() {
+        let x = parsers::parse(&vec![
+            // Token::Number(0.005),
+            Token::Name("my_fun".into()),
+            Token::OpeningParen,
+            Token::ClosingParen,
+        ]).unwrap();
+        assert_eq!(
+            x,
+            ASTNode::new(ASTNodeType::Function("my_fun".into()), vec![]),
+        );
+    }
+
+    #[test]
+    fn parse_full_fn_args() {
+        let x = parsers::parse(&vec![
+            // Token::Number(0.005),
+            Token::Name("my_fun".into()),
+            Token::OpeningParen,
+            Token::Number(10.),
+            Token::Operation(Operation::Sub),
+            Token::Number(3.),
+            Token::ClosingParen,
+        ]).unwrap();
+        assert_eq!(
+            x,
+            ASTNode::new(ASTNodeType::Function("my_fun".into()), vec![
+                ASTNode::new(ASTNodeType::Difference, vec![
+                    ASTNode::number(10.),
+                    ASTNode::number(3.)
+                ])
+            ]),
+        );
+    }
+
+    #[test]
+    fn parse_full_fn_args_nesting() {
+        let x = parsers::parse(&vec![
+            // Token::Number(0.005),
+            Token::Name("my_fun".into()),
+            Token::OpeningParen,
+            Token::Number(10.),
+            Token::Operation(Operation::Mul),
+            Token::OpeningParen,
+            Token::Operation(Operation::Sub),
+            Token::Number(3.),
+            Token::Operation(Operation::Add),
+            Token::Number(5.),
+            Token::ClosingParen,
+            Token::ClosingParen,
+        ]).unwrap();
+        assert_eq!(
+            x,
+            ASTNode::new(ASTNodeType::Function("my_fun".into()), vec![
+                ASTNode::new(ASTNodeType::Product, vec![
+                    ASTNode::number(10.),
+                    ASTNode::new(ASTNodeType::Sum, vec![
+                        ASTNode::number(-3.),
+                        ASTNode::number(5.)
+                    ])
+                ])
+            ]),
+        );
+    }
+
+    #[test]
     fn is_implied_multiplication() {
         let x = parsers::parse(&vec![
             Token::Number(10.),
@@ -903,6 +1033,24 @@ mod tests {
             ])
         );
     }
+
+    #[test]
+    fn is_implied_multiplication_number() {
+        let x = parsers::parse(&vec![
+            Token::Number(10.),
+            Token::OpeningParen,
+            Token::Number(2.),
+            Token::ClosingParen,
+        ]).unwrap();
+        assert_eq!(
+            x,
+            ASTNode::new(ASTNodeType::Product, vec![
+                ASTNode::delimeter(Token::Number(10.)),
+                ASTNode::delimeter(Token::Number(2.)),
+            ])
+        );
+    }
+
     #[test]
     fn is_implied_multiplication_quotient() {
         let x = parsers::parse(&vec![
