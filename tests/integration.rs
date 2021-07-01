@@ -1,5 +1,5 @@
 mod tests {
-    use l_robot::{parser::{ASTNode, ASTNodeType, parsers::parse}, resolver::{ResolveMessage, Resolver}, tokenizer::{Token, tokenize}};
+    use l_robot::{parser::{node::{ASTNode, ASTNodeType}, parsers::parse}, resolver::{resolve_message::ResolveMessage, Resolver}, tokenizer::{Token, tokenize}};
 
     #[test]
     fn tokenize_parse_x_squared() {

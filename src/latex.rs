@@ -1,5 +1,5 @@
 use crate::parser::parsers::is_implied_multiplication;
-use crate::parser::{ASTNode, ASTNodeType};
+use crate::parser::node::{ASTNode, ASTNodeType};
 use crate::tokenizer::{Token, Operation};
 
 use itertools::join;
@@ -139,6 +139,7 @@ impl ASTNode {
                     ASTNodeType::Quotient => "/",
                     ASTNodeType::Power => "^",
                     ASTNodeType::Equality => "=",
+                    ASTNodeType::List => ",",
                     ASTNodeType::Function(name) => name.as_str(),
                     // ASTNodeType::Error(err) => err.as_str(),
                     _ => "",

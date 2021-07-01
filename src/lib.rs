@@ -1,9 +1,9 @@
-use crate::resolver::ResolveMessage;
-
 pub mod tokenizer;
 pub mod parser;
 pub mod latex;
 pub mod resolver;
+
+use resolver::resolve_message::ResolveMessage;
 
 enum PipelineError {
     TokenizeError(tokenizer::TokenizeError),
@@ -11,10 +11,10 @@ enum PipelineError {
 }
 
 impl PipelineError {
-    fn to_resolve_message(&self) -> resolver::ResolveMessage {
+    fn to_resolve_message(&self) -> ResolveMessage {
         match self {
             PipelineError::TokenizeError(err) => match err {
-                tokenizer::TokenizeError::ParseFloatError(_) => ResolveMessage::error("Could not parse a number value"),
+                tokenizer::TokenizeError::ParseFloatError(err) => ResolveMessage::error(&err.to_string()),
             },
             PipelineError::ParsingError(err) => match err {
                 parser::ParseError::UnmatchedOpeningParen => ResolveMessage::error("Unmatched opening paren"),
@@ -27,7 +27,7 @@ impl PipelineError {
     }
 }
 
-pub fn resolve_lines(lines: Vec<String>) -> Vec<(usize, resolver::ResolveMessage)> {
+pub fn resolve_lines(lines: Vec<String>) -> Vec<(usize, ResolveMessage)> {
     let mut resolver = resolver::Resolver::new();
 
     lines.iter()

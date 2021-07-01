@@ -1,14 +1,16 @@
+pub mod resolve_message;
+pub mod namespace;
+
 use std::collections::HashMap;
 
-use crate::tokenizer::Token;
+use crate::{parser::{node::{ASTNode, ASTNodeType}, walkers::post_order}, tokenizer::Token};
 
-use crate::parser::{ASTNode, ASTNodeType};
-
-use crate::parser::walkers::post_order;
+use namespace::NamespaceElement;
+use resolve_message::ResolveMessage;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Resolver {
-    pub namespace: HashMap<String, f64>,
+    pub namespace: HashMap<String, NamespaceElement>,
 }
 
 impl Resolver {
@@ -41,8 +43,8 @@ impl Resolver {
         post_order(&mut root, &mut |x| {
             if x.node_type == ASTNodeType::Empty {
                 out.push(ResolveMessage::error("Wrong usage of operation"));
+                has_empty = true;
             }
-            has_empty = true;
         });
 
         if has_empty {
@@ -73,21 +75,44 @@ impl Resolver {
                     }
                 },
                 ASTNodeType::Empty => (), // leave it be
+                ASTNodeType::List => (), // TODO: Think what should be the behavior here
+                ASTNodeType::Assignment => {
+                    let equality = &mut x.children[0];
+                    match equality.node_type {
+                        ASTNodeType::Equality => {
+                            // right and left in reverse because of popping order
+                            // equality always has 2 children
+                            let right = equality.children.pop().unwrap();
+                            let left = equality.children.pop().unwrap();
+
+                            match &left.node_type {
+                                ASTNodeType::Function(fn_name) => {
+                                    let processed = self.process_fn(right);
+
+                                    if let Ok(processed) = processed {
+                                        self.namespace.insert(fn_name.clone(), NamespaceElement::Function());
+
+                                    }
+                                }
+                                _ => ()
+                            }
+                        }
+                        _ => { out.push(ResolveMessage::error("Invalid let assignment")) }
+                    }
+                }
                 ASTNodeType::Delimeter(delimeter) => {
                     match delimeter {
                         Token::Name(name) => {
-                            // Check if the name has been defined in the namespace and substitute it
-                            if let Some(value) = self.namespace.get(name.as_str()) {
-                                *x = ASTNode::number(*value); // learned something here
-                                // you can assign a new value to a mutable reference by dereferencing
-                                // instead of:
-                                // std::mem::replace(x, ASTNode::delimeter(Token::Number(*value)));
+                            if let Some(element) = self.namespace.get(name) {
+                                // The element exists is the namespace
+                                if let Some(node) = element.as_astnode() {
+                                    // The namespace element can be represented as a node
+                                    *x = node;
+                                }
                             } else {
-                                // the name is an unknown
                                 encountered_unknowns += 1;
                             }
                         }
-                        // Token::Number => ()
                         _ => ()
                     };
                 },
@@ -163,8 +188,8 @@ impl Resolver {
                                         match &other_side.node_type {
                                             ASTNodeType::Delimeter(Token::Number(num)) => {
                                                 // let clone = name.clone();
-                                                self.namespace.insert(name.to_string(), *num);
-                                                out.push(ResolveMessage::output(&format!("{} = {}", name, *num)));
+                                                self.namespace.insert(name.to_string(), NamespaceElement::Number(*num));
+                                                out.push(ResolveMessage::output(&format!("{} = {}", name, num)));
                                             }
                                             _ => {
                                                 out.push(ResolveMessage::error("Could not resolve equation"));
@@ -215,7 +240,7 @@ impl Resolver {
         out
     }
 
-    pub fn resolve_fn(&mut self, _name: &str) -> Result<ASTNode, ResolveMessage> {
+    pub fn process_fn(&mut self, body: ASTNode) -> Result<ASTNode, ResolveMessage> {
         todo!()
     }
 }
@@ -242,53 +267,9 @@ fn resolve_numbers(node: &mut ASTNode, operate: fn(f64, f64) -> Result<f64, Reso
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum ResolveMessageType {
-    Error,
-    Info,
-    Output,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ResolveMessage {
-    pub msg_type: ResolveMessageType,
-    pub content: String
-}
-
-impl ResolveMessage {
-    pub fn error(content: &str) -> Self {
-        Self {
-            content: content.into(),
-            msg_type: ResolveMessageType::Error
-        }
-    }
-
-    pub fn info(content: &str) -> Self {
-        Self {
-            content: content.into(),
-            msg_type: ResolveMessageType::Info
-        }
-    }
-
-    pub fn output(content: &str) -> Self {
-        Self {
-            content: content.into(),
-            msg_type: ResolveMessageType::Output
-        }
-    }
-}
-
-/// For future use, currently names can be only numbers
-pub enum NamespaceElement {
-    Number(f64),
-    BigNum(f64), // TODO: More types
-    // Matrix(f64),
-    Function(Box<dyn Fn(&mut Vec<ASTNode>) -> ASTNode>)
-}
-
 #[cfg(test)]
 mod tests {
-    use crate::{parser::{ASTNode, ASTNodeType}, resolver::{self, ResolveMessage, Resolver}, tokenizer::Token};
+    use crate::{parser::node::{ASTNode, ASTNodeType}, resolver::{self, NamespaceElement, ResolveMessage, Resolver}, tokenizer::Token};
 
     #[test]
     fn resolve_numbers() {
@@ -432,6 +413,6 @@ mod tests {
 
         assert_eq!(output.first().unwrap().content, "guacamole = 100");
 
-        assert_eq!(resolver.namespace.get("guacamole".into()), Some(&100.));
+        assert_eq!(resolver.namespace.get("guacamole".into()), Some(&NamespaceElement::Number(100.)));
     }
 }

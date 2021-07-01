@@ -1,6 +1,6 @@
 use std::fs;
 
-use l_robot::{parser::parsers::parse, resolve_lines, resolver::{ResolveMessage, ResolveMessageType}, tokenizer::tokenize};
+use l_robot::{parser::parsers::parse, resolve_lines, resolver::resolve_message::{ResolveMessage, ResolveMessageType}, tokenizer::tokenize};
 
 use clap::{Arg, App};
 use colored::Colorize;

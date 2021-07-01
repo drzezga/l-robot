@@ -9,6 +9,8 @@ pub enum Token {
     ClosingParen,
     OpeningBracket,
     ClosingBracket,
+    Comma,
+    Let,
     Empty
 }
 
@@ -110,6 +112,14 @@ pub fn tokenize(line: &str) -> Result<Vec<Token>, TokenizeError> {
                 out_vec.push(Token::ClosingBracket);
                 is_num = true;
             }
+            ',' => {
+                if !current.is_empty() {
+                    out_vec.push(parse_token(&current, is_num)?);
+                    current.clear();
+                }
+                out_vec.push(Token::Comma);
+                is_num = true;
+            }
             _ if char.is_whitespace() => {
                 if !current.is_empty() {
                     out_vec.push(parse_token(&current, is_num)?);
@@ -153,7 +163,10 @@ fn parse_token(to_tokenize: &str, is_num: bool) -> Result<Token, TokenizeError> 
             Err(err) => Err(TokenizeError::ParseFloatError(err))
         }
     } else {
-        Ok(Token::Name(to_tokenize.into()))
+        match to_tokenize {
+            "let" => Ok(Token::Let),
+            _ => Ok(Token::Name(to_tokenize.into()))
+        }
     }
 }
 
