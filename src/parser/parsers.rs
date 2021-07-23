@@ -1,6 +1,6 @@
 use crate::{parser::node::ASTNodeType, tokenizer::{Operation, Token}};
 
-use super::{*, node::ASTNode, walkers::post_order};
+use super::{*, node::ASTNode, walkers::post_order_mut};
 
 static EXP_TOKENS: &[Token] = &[Token::Operation(Operation::Exp)];
 static DIV_TOKENS: &[Token] = &[Token::Operation(Operation::Div)];
@@ -201,7 +201,7 @@ pub fn parse_brackets(_tree: &mut ASTNode) {
 }
 
 pub fn parse_negatives(tree: &mut ASTNode) {
-    post_order(tree, &mut |node| {
+    post_order_mut(tree, &mut |node| {
         // c-like for loop
         if node.children.len() >= 2 {
             // println!("Interfix walker in {:#?}", node);
@@ -258,7 +258,7 @@ pub fn optimise_tree(tree: &mut ASTNode) {
 
 /// Collapses empty nodes with a single child and performs implied multiplication
 pub fn collapse_empty(tree: &mut ASTNode) {
-    walkers::post_order(tree, &mut |node| {
+    walkers::post_order_mut(tree, &mut |node| {
         if node.node_type == ASTNodeType::Empty {
             let n = node.children.len();
             if n == 1 {
@@ -308,6 +308,7 @@ pub fn is_implied_multiplication(a: &ASTNode, b: &ASTNode) -> bool {
                 },
                 // ASTNodeType::Equality => false, // no
                 ASTNodeType::Delimeter(Token::Name(_)) => true,
+                ASTNodeType::Delimeter(Token::Number(_)) => true,
                 // ASTNodeType::Function(_) => false, // no
                 ASTNodeType::Empty => true, // yes
                 _ => false

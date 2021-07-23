@@ -53,6 +53,7 @@ pub enum ASTNodeType {
     Delimeter(Token),
     // Error(String),
     Function(String),
+    FnArgument(usize),
     List,
     Assignment,
     Empty,

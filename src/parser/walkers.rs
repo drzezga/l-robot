@@ -21,16 +21,32 @@ use super::node::{ASTNode, ASTNodeType};
 //     }
 // }
 
+/// Walks over every element in the tree, post-order, calling walk. Stops on delimeters.
+/// Modifies elements bottom up.
+pub fn post_order<F>(tree: &ASTNode, walk: &mut F)
+    where F : FnMut(&ASTNode) {
+    // iterate recursively over everything, stopping on delimeters
+    match tree.node_type {
+        ASTNodeType::Delimeter(_) => (),
+        _ => {
+            for child in &tree.children {
+                post_order(child, walk);
+            }
+        }
+    }
+    walk(tree);
+}
+
 /// Walks over every element in the tree, post-order, calling modify. Stops on delimeters.
 /// Modifies elements bottom up.
-pub fn post_order<F>(tree: &mut ASTNode, modify: &mut F)
+pub fn post_order_mut<F>(tree: &mut ASTNode, modify: &mut F)
     where F : FnMut(&mut ASTNode) {
     // iterate recursively over everything, stopping on delimeters
     match tree.node_type {
         ASTNodeType::Delimeter(_) => (),
         _ => {
             for child in &mut tree.children {
-                post_order(child, modify);
+                post_order_mut(child, modify);
             }
         }
     }
@@ -42,7 +58,7 @@ pub fn post_order<F>(tree: &mut ASTNode, modify: &mut F)
 /// Walks over a tree and folds expressions of form (* interfix *)
 pub fn interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
     where F : Fn(ASTNode, ASTNode) -> ASTNode, T: Deref<Target = [Token]> {
-    post_order(tree, &mut |node| {
+    post_order_mut(tree, &mut |node| {
         // c-like for loop
         if node.children.len() >= 3 {
             let mut i = 1;
@@ -73,7 +89,7 @@ pub fn interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
 /// Walks over a tree and folds expressions of form (* interfix *)
 pub fn failing_interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, create: &F)
     where F : Fn(&mut ASTNode, &mut ASTNode) -> Option<ASTNode>, T: Deref<Target = [Token]> {
-    post_order(tree, &mut |node| {
+    post_order_mut(tree, &mut |node| {
         // c-like for loop
         let mut i = 1;
         if node.children.len() >= 3 {
@@ -175,7 +191,7 @@ pub fn failing_interfix_walker<F, T>(tree: &mut ASTNode, interfix_list: &T, crea
 /// Walks over a tree and folds expressions of form (prefix *)
 pub fn prefix_walker<F, T>(tree: &mut ASTNode, prefix_list: &T, create: &F)
     where F : Fn(ASTNode) -> ASTNode, T: Deref<Target = [Token]> {
-    post_order(tree, &mut |node| {
+    post_order_mut(tree, &mut |node| {
         // c-like for loop, because node.children.len() changes
         if node.children.len() >= 2 {
             let mut i = 0;
@@ -202,7 +218,7 @@ pub fn prefix_walker<F, T>(tree: &mut ASTNode, prefix_list: &T, create: &F)
 /// The argument of `create` is always a table of size N, on which `match_fn` returned true.
 pub fn generic_walker<F, T, const N: usize>(tree: &mut ASTNode, match_fn: &T, create: &F)
     where T: Fn(&[ASTNode]) -> bool, F : Fn([ASTNode; N]) -> ASTNode {
-    post_order(tree, &mut |node| {
+    post_order_mut(tree, &mut |node| {
         // c-like for loop
         if node.children.len() >= N {
             let mut i = 0;
