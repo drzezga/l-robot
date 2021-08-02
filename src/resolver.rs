@@ -41,12 +41,13 @@ impl Resolver {
 
     pub fn resolve_line(&mut self, mut root: ASTNode) -> Vec<ResolveMessage> {
         let mut out = Vec::new();
-        let mut encountered_unknowns: HashSet<String> = HashSet::new();
 
+        // Check if there are no empty astnodes, as they indicate an error
         let mut has_empty = false;
         post_order_mut(&mut root, &mut |x| {
             if x.node_type == ASTNodeType::Empty {
                 out.push(ResolveMessage::error("Wrong usage of operation"));
+                out.push(ResolveMessage::error("Note: This usually means you forgot a +, -, /, etc."));
                 has_empty = true;
             }
         });
@@ -55,80 +56,107 @@ impl Resolver {
             return out;
         }
 
+        // Substitute function usages
+
+        // Resolve the root and check for errors
+        let resolve_result = self.resolve_expression(&mut root);
+
+        let encountered_unknowns = if let Ok(x) = resolve_result {
+            x
+        } else {
+            return resolve_result.unwrap_err();
+        };
+
+        // TODO:
+        //  - check if the root is an assignment and only resolve the right side
+        //  - walk the root to substitute functions for their nodes
+        //  - substitute args
+
         // let operation_mode = match &root.node_type {
         //     ASTNodeType::Equality => OperationMode::Equation,
         //     ASTNodeType::Assignment => OperationMode::Assignment,
         //     _ => OperationMode::Expression
         // };
 
-        post_order_mut(&mut root, &mut |x| {
-            match &x.node_type {
-                ASTNodeType::Sum => { resolve_numbers(x, |a, b| Ok(a + b)); },
-                ASTNodeType::Difference => { resolve_numbers(x, |a, b| Ok(a - b)); },
-                ASTNodeType::Product => { resolve_numbers(x, |a, b| Ok(a * b)); },
-                ASTNodeType::Quotient => {
-                    let result = resolve_numbers(
-                        x,
-                        |a, b| if b != 0. { Ok(a / b) } else { Err(ResolveMessage::error("Divide by zero")) }
-                    );
-                    if let Some(err) = result {
-                        out.push(err);
-                    }
-                },
-                ASTNodeType::Power => { resolve_numbers(x, |a, b| Ok(f64::powf(a, b))); },
-                ASTNodeType::Equality => (), // we're done
-                ASTNodeType::Function(f_name) => {
-                    // currently if the name is in the namespace, it is multiplication
-                    if let Some(_) = self.namespace.get(f_name.as_str()) {
-                        // the "function" is actually implied multiplication, we just multiply
-                        resolve_numbers(x, |a, b| Ok(a * b));
-                    }
-                },
-                ASTNodeType::Empty => (), // leave it be
-                ASTNodeType::List => (), // TODO: Think what should be the behavior here
-                &ASTNodeType::FnArgument(_) => (), // impossible to be here
-                ASTNodeType::Assignment => {
-                    let equality = &mut x.children[0];
-                    match equality.node_type {
-                        ASTNodeType::Equality => {
-                            // right and left in reverse because of popping order
-                            // equality always has 2 children
-                            let body_node = equality.children.pop().unwrap();
-                            let fun_node = equality.children.pop().unwrap();
+        // post_order_mut(&mut root, &mut |x| {
+        //     match &x.node_type {
+        //         ASTNodeType::Sum => { resolve_numbers(x, |a, b| Ok(a + b)); },
+        //         ASTNodeType::Difference => { resolve_numbers(x, |a, b| Ok(a - b)); },
+        //         ASTNodeType::Product => { resolve_numbers(x, |a, b| Ok(a * b)); },
+        //         ASTNodeType::Quotient => {
+        //             let result = resolve_numbers(
+        //                 x,
+        //                 |a, b| if b != 0. { Ok(a / b) } else { Err(ResolveMessage::error("Divide by zero")) } // TODO: Drilldown
+        //             );
+        //             if let Some(err) = result {
+        //                 out.push(err);
+        //             }
+        //         },
+        //         ASTNodeType::Power => { resolve_numbers(x, |a, b| Ok(f64::powf(a, b))); },
+        //         ASTNodeType::Function(f_name) => {
+        //             // currently if the name is in the namespace, it is multiplication
+        //             if let Some(element) = self.namespace.get(f_name.as_str()) {
+        //                 match element {
+        //                     // the "function" is actually implied multiplication, we just multiply
+        //                     NamespaceElement::Number(_) => {
+        //                         resolve_numbers(x, |a, b| Ok(a * b));
+        //                     }
+        //                     NamespaceElement::Function(body) => {
 
-                            match &fun_node.node_type {
-                                ASTNodeType::Function(fn_name) => {
-                                    // let assignment currently only works for functions
-                                    match self.process_fn(&fun_node, body_node) {
-                                        Ok(processed) => { self.namespace.insert(fn_name.clone(), NamespaceElement::Function(processed)); }
-                                        Err(err) => { out.push(err); }
-                                    }
-                                }
-                                _ => ()
-                            }
-                        }
-                        _ => { out.push(ResolveMessage::error("Invalid let assignment")) }
-                    }
-                }
-                ASTNodeType::Delimeter(delimeter) => {
-                    match delimeter {
-                        Token::Name(name) => {
-                            if let Some(element) = self.namespace.get(name) {
-                                // The element exists is the namespace
-                                if let Some(node) = element.as_astnode() {
-                                    // The namespace element can be represented as a node
-                                    *x = node;
-                                }
-                            } else {
-                                encountered_unknowns.insert(name.clone());
-                            }
-                        }
-                        _ => ()
-                    };
-                },
-            };
-        });
+        //                     },
+        //                 }
+        //             }
+        //         },
+        //         ASTNodeType::Empty => (), // leave it be
+        //         ASTNodeType::List => (), // TODO: Think what should be the behavior here
+        //         ASTNodeType::FnArgument(_) => (), // impossible to be here
+        //         ASTNodeType::Assignment => (), // the end
+        //         ASTNodeType::Equality => (), // the end
+        //         // ASTNodeType::Assignment => {
+        //         //     let equality = &mut x.children[0];
+        //         //     match equality.node_type {
+        //         //         ASTNodeType::Equality => {
+        //         //             // right and left in reverse because of popping order
+        //         //             // equality always has 2 children
+        //         //             let body_node = equality.children.pop().unwrap();
+        //         //             let fun_node = equality.children.pop().unwrap();
 
+        //         //             match &fun_node.node_type {
+        //         //                 ASTNodeType::Function(fn_name) => {
+        //         //                     // let assignment currently only works for functions
+        //         //                     match self.process_fn(&fun_node, body_node) {
+        //         //                         Ok(processed) => { self.namespace.insert(fn_name.clone(), NamespaceElement::Function(processed)); }
+        //         //                         Err(err) => { out.push(err); }
+        //         //                     }
+        //         //                 }
+        //         //                 _ => ()
+        //         //             }
+        //         //         }
+        //         //         _ => { out.push(ResolveMessage::error("Invalid let assignment")) }
+        //         //     }
+        //         // }
+        //         ASTNodeType::Delimeter(delimeter) => {
+        //             match delimeter {
+        //                 Token::Name(name) => {
+        //                     if let Some(element) = self.namespace.get(name) {
+        //                         // The element exists is the namespace
+        //                         if let Some(node) = element.as_astnode() {
+        //                             // The namespace element can be represented as a node
+        //                             *x = node;
+        //                         }
+        //                     } else {
+        //                         encountered_unknowns.insert(name.clone());
+        //                     }
+        //                 }
+        //                 _ => ()
+        //             };
+        //         },
+        //     };
+        // });
+
+        // Finish by interpreting the resulting tree
+        // If it is a single node, the line resolved successfully
+        // Otherwise, walk trough the tree and check where resolving stopped to throw an approppriate error
         match &root.node_type {
             ASTNodeType::Equality => {
                 match encountered_unknowns.len() {
@@ -144,7 +172,28 @@ impl Resolver {
                 }
             }
             ASTNodeType::Assignment => { // assignment
-
+                match &root.children[0].node_type {
+                    &ASTNodeType::Equality => {
+                        let body = root.children[0].children.pop().unwrap();
+                        let fn_declaration = root.children[0].children.pop().unwrap(); // TODO: Drill down and check for illegal elements
+                        // let (args, body) = (, root.children[0].children.pop().unwrap());
+                        match &fn_declaration.node_type {
+                            ASTNodeType::Function(name) => {
+                                let name = name.clone();
+                                let processed_fn = self.process_fn(&fn_declaration.children[0], body);
+                                if let Err(error) = processed_fn {
+                                    out.push(error);
+                                } else {
+                                    let (processed_body, arguments) = processed_fn.unwrap();
+                                    self.namespace.insert(name.to_string(), NamespaceElement::Function(processed_body));
+                                    out.push(ResolveMessage::output(&format!("{}({}) = [...]", name, arguments.join(", "))));
+                                }
+                            }
+                            _ => out.push(ResolveMessage::error("Assignment requires function on left side"))
+                        }
+                    }
+                    _ => out.push(ResolveMessage::error("Let assignments must be followed by a valid equality"))
+                }
             }
             _ => { // expression
                 if encountered_unknowns.len() == 0 {
@@ -284,6 +333,99 @@ impl Resolver {
         out
     }
 
+    /// Expands functions from the namespace
+    pub fn expand_functions(&self, expr: &mut ASTNode) -> Result<(), ResolveMessage> {
+
+        todo!()
+    }
+
+    /// Returns a result of the set of encountered unknowns or a resolve message containing an error
+    pub fn resolve_expression(&mut self, expr: &mut ASTNode) -> Result<HashSet<String>, Vec<ResolveMessage>> {
+        let mut encountered_unknowns = HashSet::<String>::new();
+        let mut errors: Vec<ResolveMessage> = vec![];
+
+        post_order_mut(expr, &mut |x| {
+            match &x.node_type {
+                ASTNodeType::Sum => { resolve_numbers(x, |a, b| Ok(a + b)); },
+                ASTNodeType::Difference => { resolve_numbers(x, |a, b| Ok(a - b)); },
+                ASTNodeType::Product => { resolve_numbers(x, |a, b| Ok(a * b)); },
+                ASTNodeType::Quotient => {
+                    let result = resolve_numbers(
+                        x,
+                        |a, b| if b != 0. { Ok(a / b) } else { Err(ResolveMessage::error("Divide by zero")) } // TODO: Drilldown
+                    );
+                    if let Some(err) = result {
+                        errors.push(err);
+                    }
+                },
+                ASTNodeType::Power => { resolve_numbers(x, |a, b| Ok(f64::powf(a, b))); },
+                ASTNodeType::Function(f_name) => { // TODO: Move this out of here to a different loop
+                    // currently if the name is in the namespace, it is multiplication
+                    if let Some(element) = self.namespace.get(f_name.as_str()) {
+                        match element {
+                            // the "function" is actually implied multiplication, we just multiply
+                            NamespaceElement::Number(_) => {
+                                resolve_numbers(x, |a, b| Ok(a * b));
+                            }
+                            NamespaceElement::Function(body) => {
+                                
+                            },
+                        }
+                    }
+                },
+                ASTNodeType::Empty => (), // leave it be
+                ASTNodeType::List => (), // TODO: Think what should be the behavior here
+                ASTNodeType::FnArgument(_) => (), // impossible to be here
+                ASTNodeType::Assignment => (), // the end
+                ASTNodeType::Equality => (), // the end
+                // ASTNodeType::Assignment => {
+                //     let equality = &mut x.children[0];
+                //     match equality.node_type {
+                //         ASTNodeType::Equality => {
+                //             // right and left in reverse because of popping order
+                //             // equality always has 2 children
+                //             let body_node = equality.children.pop().unwrap();
+                //             let fun_node = equality.children.pop().unwrap();
+
+                //             match &fun_node.node_type {
+                //                 ASTNodeType::Function(fn_name) => {
+                //                     // let assignment currently only works for functions
+                //                     match self.process_fn(&fun_node, body_node) {
+                //                         Ok(processed) => { self.namespace.insert(fn_name.clone(), NamespaceElement::Function(processed)); }
+                //                         Err(err) => { out.push(err); }
+                //                     }
+                //                 }
+                //                 _ => ()
+                //             }
+                //         }
+                //         _ => { out.push(ResolveMessage::error("Invalid let assignment")) }
+                //     }
+                // }
+                ASTNodeType::Delimeter(delimeter) => {
+                    match delimeter {
+                        Token::Name(name) => {
+                            if let Some(element) = self.namespace.get(name) {
+                                // The element exists is the namespace
+                                if let Some(node) = element.as_astnode() {
+                                    // The namespace element can be represented as a node
+                                    *x = node;
+                                }
+                            } else {
+                                encountered_unknowns.insert(name.clone());
+                            }
+                        }
+                        _ => ()
+                    };
+                },
+            };
+        });
+        if !errors.is_empty() {
+            Err(errors)
+        } else {
+            Ok(encountered_unknowns)
+        }
+    }
+
     pub fn resolve_equation(&mut self, root: &mut ASTNode) -> ResolveMessage {
         // TODO: An assumption is made here, that the unknown is a number
         let (mut unknown_side, mut other_side) = match (&root.children[0].node_type, &root.children[1].node_type) {
@@ -365,7 +507,8 @@ impl Resolver {
     }
 
     /// Processes the function body, substituting and replacing argument names with argument placeholders
-    pub fn process_fn(&mut self, args: &ASTNode, mut body: ASTNode) -> Result<ASTNode, ResolveMessage> {
+    /// @returns Result of a tuple of the resulting Function body and a vector of argument names
+    pub fn process_fn(&mut self, args: &ASTNode, mut body: ASTNode) -> Result<(ASTNode, Vec<String>), ResolveMessage> {
         let processed_args = process_fn_args(args)?;
         let mut unknown_name: String = String::new();
 
@@ -381,13 +524,14 @@ impl Resolver {
         if unknown_name != "" {
             Err(ResolveMessage::error(&format!("Unknown name: {}", unknown_name)))
         } else {
-            Ok(body)
+            Ok((body, processed_args))
         }
     }
 }
 
 /// Transforms a List ASTNode into a vector of arg names
 pub fn process_fn_args(args: &ASTNode) -> Result<Vec<String>, ResolveMessage> {
+    println!("{:?}", args);
     let mut out = vec![];
     let mut has_invalid_args = false;
     walkers::post_order(&args, &mut |x| {
@@ -575,5 +719,38 @@ mod tests {
         assert_eq!(output.first().unwrap().content, "guacamole = 100");
 
         assert_eq!(resolver.namespace.get("guacamole".into()), Some(&NamespaceElement::Number(100.)));
+    }
+
+    #[test]
+    fn resolve_assignment_inserts_into_namespace() {
+        let node = ASTNode::new(ASTNodeType::Assignment, vec![
+            ASTNode::new(ASTNodeType::Equality, vec![
+                ASTNode::new(ASTNodeType::Function("fn".into()), vec![
+                    ASTNode::delimeter(Token::Name("x".into())),
+                ]),
+                ASTNode::new(ASTNodeType::Sum, vec![
+                    ASTNode::delimeter(Token::Name("x".into())),
+                    ASTNode::number(10.),
+                ]),
+            ]),
+        ]);
+
+        let mut resolver = Resolver::new();
+
+        let output = resolver.resolve_line(node);
+
+        // println!("{:?}", output);
+
+        assert_eq!(output.len(), 1);
+
+        assert_eq!(output.first().unwrap().content, "fn(x) = [...]");
+
+        assert_eq!(
+            resolver.namespace.get("fn".into()),
+            Some(&NamespaceElement::Function(ASTNode::new(ASTNodeType::Sum, vec![
+                ASTNode::new(ASTNodeType::FnArgument(0), vec![]),
+                ASTNode::number(10.),
+            ])))
+        );
     }
 }
