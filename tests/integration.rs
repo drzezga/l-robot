@@ -1,5 +1,5 @@
 mod tests {
-    use l_robot::{parser::{node::{ASTNode, ASTNodeType}, parsers::parse}, resolver::{resolve_message::ResolveMessage, Resolver}, tokenizer::{Token, tokenize}};
+    use l_robot::{parser::{node::{ASTNode, ASTNodeType}, parsers::parse}, resolver::{Resolver, resolve_message::{ResolveMessage, ResolveMessageType}}, tokenizer::{Token, tokenize}};
 
     #[test]
     fn tokenize_parse_x_squared() {
@@ -137,5 +137,32 @@ mod tests {
         let output = resolver.resolve(x.collect());
 
         assert_eq!(output.last().unwrap(), &(2usize, ResolveMessage::output("? = 0.0001")));
+    }
+
+    #[test]
+    fn resolve_with_partial_fn_declaration() {
+        let x = "let f()";
+        let mut resolver = Resolver::new();
+
+        let output = resolver.resolve_line(parse(&tokenize(x).unwrap()).unwrap());
+
+        assert_eq!(output.len(), 1);
+
+        assert!(matches!(output.first().unwrap().msg_type, ResolveMessageType::Error));
+    }
+
+    #[test]
+    fn resolve_with_missing_side_of_equation() {
+        let x = "10 =";
+        let mut resolver = Resolver::new();
+
+        let output = resolver.resolve_line(parse(&tokenize(x).unwrap()).unwrap());
+
+        println!("{:?}", output);
+
+        assert_eq!(output.len(), 2);
+
+        assert!(matches!(output.first().unwrap().msg_type, ResolveMessageType::Error));
+        assert!(matches!(output[1].msg_type, ResolveMessageType::Error));
     }
 }

@@ -56,12 +56,16 @@ impl Resolver {
             return out;
         }
 
-        // Substitute function usages
-
         // Resolve the root and check for errors
         let resolve_result = match &root.node_type {
             // if the root is an assignment, only resolve the right side
-            ASTNodeType::Assignment => self.resolve_expression(&mut root.children[0].children[1]),
+            ASTNodeType::Assignment => {
+                if !matches!(root.children[0].node_type, ASTNodeType::Equality) {
+                    return vec![ResolveMessage::error("Assignment must contain an equality in a correct place")];
+                }
+                // if root.children[0]
+                self.resolve_expression(&mut root.children[0].children[1])
+            }
             _ => self.resolve_expression(&mut root),
         };
 
