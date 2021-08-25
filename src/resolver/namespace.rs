@@ -14,7 +14,7 @@ impl NamespaceElement {
     pub fn as_astnode(&self) -> Option<ASTNode> {
         match self {
             NamespaceElement::Number(num) => Some(ASTNode::number(*num)),
-            NamespaceElement::Function(_) => todo!(),
+            NamespaceElement::Function(_) => None,
             // _ => None,
         }
     }

@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_with_partial_fn_declaration() {
+    fn resolve_with_partial_fn_declaration_throws_error() {
         let x = "let f()";
         let mut resolver = Resolver::new();
 
@@ -152,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn resolve_with_missing_side_of_equation() {
+    fn resolve_with_missing_side_of_equation_throws_error() {
         let x = "10 =";
         let mut resolver = Resolver::new();
 
@@ -164,5 +164,29 @@ mod tests {
 
         assert!(matches!(output.first().unwrap().msg_type, ResolveMessageType::Error));
         assert!(matches!(output[1].msg_type, ResolveMessageType::Error));
+    }
+
+    #[test]
+    fn resolve_fn_assignment_with_missing_parts_does_not_panic() {
+        let x = "let f(x, y) = x^(y + 1)";
+        for i in 0..x.len() {
+            let mut resolver = Resolver::new();
+            let line = x[0..=i].into();
+            if let Ok(tokenized) = tokenize(line) {
+                if let Ok(parsed) = parse(&tokenized) {
+                    resolver.resolve_line(parsed);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn resolve_fn_assignment_with_another_line_does_not_panic() {
+        let x = "let f(x) = 10";
+        let y = "f";
+        let mut resolver = Resolver::new();
+
+        resolver.resolve_line(parse(&tokenize(x).unwrap()).unwrap());
+        resolver.resolve_line(parse(&tokenize(y).unwrap()).unwrap());
     }
 }
