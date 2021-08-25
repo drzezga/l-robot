@@ -182,11 +182,16 @@ mod tests {
 
     #[test]
     fn resolve_fn_assignment_with_another_line_does_not_panic() {
-        let x = "let f(x) = 10";
-        let y = "f";
+        let x = vec![
+            "let f(x) = 10",
+            "f",
+            "f()",
+            "f(10)"
+        ];
         let mut resolver = Resolver::new();
 
-        resolver.resolve_line(parse(&tokenize(x).unwrap()).unwrap());
-        resolver.resolve_line(parse(&tokenize(y).unwrap()).unwrap());
+        for x in x {
+            resolver.resolve_line(parse(&tokenize(x).unwrap()).unwrap());
+        }
     }
 }

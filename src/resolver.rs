@@ -461,7 +461,11 @@ impl Resolver {
 
     fn resolve_fn(&self, node: &mut ASTNode, body: &ASTNode) -> Result<HashSet<String>, Vec<ResolveMessage>> {
         // let args = process_fn_args(&node.children[0])?;
-        let args = list_node_to_vec(&node.children[0]);
+        let args = if !&node.children.is_empty() {
+            list_node_to_vec(&node.children[0])
+        } else {
+            vec![]
+        };
 
         let mut working_body = body.clone();
 
