@@ -54,8 +54,8 @@ impl Resolver {
 
         if has_empty {
             // Special case when the input is empty.
-            // This is denoted by an empty root node.
-            if root.node_type == ASTNodeType::Empty {
+            // This is denoted by an empty root node with no children.
+            if root.node_type == ASTNodeType::Empty && root.children.is_empty() {
                 return vec![];
             }
             return out;
