@@ -194,4 +194,26 @@ mod tests {
             resolver.resolve_line(parse(&tokenize(x).unwrap()).unwrap());
         }
     }
+
+    #[test]
+    fn resolve_whitespace_returns_nothing() {
+        let x = vec![
+            "\n",
+            " \t",
+            "    ",
+            " ",
+            ""
+        ];
+
+        let mut resolver = Resolver::new();
+
+        for x in x {
+            assert_eq!(
+                resolver.resolve_line(parse(&tokenize(x).unwrap()).unwrap()),
+                vec![],
+                "failed with str \"{}\"",
+                x
+            );
+        }
+    }
 }

@@ -226,4 +226,24 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn tokenize_whitespace_returns_nothing() {
+        let x = vec![
+            "\n",
+            " \t",
+            "    ",
+            " ",
+            ""
+        ];
+
+        for x in x {
+            assert_eq!(
+                tokenize(x),
+                Ok(vec![]),
+                "failed with str \"{}\"",
+                x
+            );
+        }
+    }
 }

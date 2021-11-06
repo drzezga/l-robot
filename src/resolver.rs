@@ -53,6 +53,11 @@ impl Resolver {
         });
 
         if has_empty {
+            // Special case when the input is empty.
+            // This is denoted by an empty root node.
+            if root.node_type == ASTNodeType::Empty {
+                return vec![];
+            }
             return out;
         }
 
@@ -785,5 +790,15 @@ mod tests {
         assert_eq!(output.len(), 1);
 
         assert_eq!(output.first().unwrap().content, "? = 104");
+    }
+
+    #[test]
+    fn resolve_empty_returns_nothing() {
+        let mut resolver = Resolver::new();
+
+        assert_eq!(
+            resolver.resolve(vec![(1, ASTNode::empty(vec![]))]),
+            vec![],
+        );
     }
 }

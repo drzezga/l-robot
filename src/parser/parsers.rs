@@ -348,7 +348,7 @@ pub fn is_implied_multiplication(a: &ASTNode, b: &ASTNode) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{parser::{ParseError, node::{ASTNode, ASTNodeType}, parsers}, tokenizer::{Operation, Token}};
+    use crate::{parser::{ParseError, node::{ASTNode, ASTNodeType}, parsers::{self, parse}}, tokenizer::{Operation, Token}};
 
     #[test]
     fn parse_parens() {
@@ -688,6 +688,14 @@ mod tests {
                 ASTNode::delimeter(Token::Number(10.)),
                 ASTNode::delimeter(Token::Name("x".into())),
             ])
+        );
+    }
+
+    #[test]
+    fn parse_empty_returns_empty() {
+        assert_eq!(
+            parse(&vec![]),
+            Ok(ASTNode::empty(vec![]))
         );
     }
 }
