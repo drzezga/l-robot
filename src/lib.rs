@@ -5,18 +5,18 @@ pub mod resolver;
 
 use resolver::resolve_message::ResolveMessage;
 
-enum PipelineError {
+enum LRobotError {
     TokenizeError(tokenizer::TokenizeError),
     ParsingError(parser::ParseError),
 }
 
-impl PipelineError {
+impl LRobotError {
     fn to_resolve_message(&self) -> ResolveMessage {
         match self {
-            PipelineError::TokenizeError(err) => match err {
+            LRobotError::TokenizeError(err) => match err {
                 tokenizer::TokenizeError::ParseFloatError(err) => ResolveMessage::error(&err.to_string()),
             },
-            PipelineError::ParsingError(err) => match err {
+            LRobotError::ParsingError(err) => match err {
                 parser::ParseError::UnmatchedOpeningParen => ResolveMessage::error("Unmatched opening paren"),
                 parser::ParseError::UnmatchedClosingParen => ResolveMessage::error("Unmatched closing paren"),
                 parser::ParseError::UnmatchedOpeningBracket => ResolveMessage::error("Unmatched opening bracket"),
@@ -34,7 +34,7 @@ pub fn resolve_lines(lines: Vec<String>) -> Vec<(usize, ResolveMessage)> {
         .map(|line| {
             match tokenizer::tokenize(line) {
                 Ok(x) => Ok(x),
-                Err(err) => Err(PipelineError::TokenizeError(err)),
+                Err(err) => Err(LRobotError::TokenizeError(err)),
             }
         })
         // .filter(|(_, tokens)| tokens.len() != 0)
@@ -43,7 +43,7 @@ pub fn resolve_lines(lines: Vec<String>) -> Vec<(usize, ResolveMessage)> {
                 Ok(tokens) => {
                     match parser::parsers::parse(&tokens) {
                         Ok(x) => Ok(x),
-                        Err(err) => Err(PipelineError::ParsingError(err)),
+                        Err(err) => Err(LRobotError::ParsingError(err)),
                     }
                 },
                 Err(x) => Err(x),
@@ -58,4 +58,8 @@ pub fn resolve_lines(lines: Vec<String>) -> Vec<(usize, ResolveMessage)> {
         })
         .flatten()
         .collect()
+}
+
+pub fn git_hash() -> String {
+    env!("GIT_HASH").to_string()
 }
